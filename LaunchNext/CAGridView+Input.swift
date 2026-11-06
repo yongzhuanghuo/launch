@@ -1,0 +1,1681 @@
+import AppKit
+import QuartzCore
+
+extension CAGridView {
+    // MARK: - Input Handling
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func becomeFirstResponder() -> Bool {
+        // print("🎯 [CAGrid] becomeFirstResponder")
+        return true
+    }
+
+    override func resignFirstResponder() -> Bool {
+        // print("🎯 [CAGrid] resignFirstResponder")
+        return true
+    }
+
+    // 确保视图接受第一次鼠标点击就能响应
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        return true
+    }
+
+    // 确保视图可以接收鼠标事件
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let result = frame.contains(point) ? self : nil
+        return result
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let existing = hoverTrackingArea {
+            removeTrackingArea(existing)
+        }
+        let options: NSTrackingArea.Options = [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect]
+        let area = NSTrackingArea(rect: bounds, options: options, owner: self, userInfo: nil)
+        addTrackingArea(area)
+        hoverTrackingArea = area
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        guard hoverMagnificationEnabled else {
+            clearHover()
+            return
+        }
+        guard !isDraggingItem && !isPageDragging && !isDragging else {
+            clearHover()
+            return
+        }
+        let location = convert(event.locationInWindow, from: nil)
+        if let (item, _) = itemAt(location), case .empty = item {
+            updateHoverIndex(nil)
+        } else if let (_, index) = itemAt(location) {
+            updateHoverIndex(index)
+        } else {
+            updateHoverIndex(nil)
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        clearHover()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateLabelColors()
+        updateFolderGlassColors()
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        guard !isContextMenuTracking else {
+            super.scrollWheel(with: event)
+            return
+        }
+        // 当本地 monitor 存在时，避免双重处理
+        if scrollEventMonitor != nil {
+            return
+        }
+        guard isScrollEnabled else { return }
+        handleScrollWheel(with: event)
+    }
+
+    func handleScrollWheel(with event: NSEvent) {
+        finishFolderDissolve()
+        finishDragLanding()
+        // Prefer horizontal movement; vertical precise input can be flipped separately.
+        let deltaX = event.scrollingDeltaX
+        let deltaY = event.scrollingDeltaY
+        let isPrecise = event.hasPreciseScrollingDeltas
+        let verticalDelta = preciseVerticalDelta(from: deltaY, isPrecise: isPrecise)
+        let delta = abs(deltaX) > abs(deltaY) ? deltaX : verticalDelta
+        let baseline = max(AppStore.defaultScrollSensitivity, 0.0001)
+        let sensitivityScale = CGFloat(max(scrollSensitivity, 0.0001) / baseline)
+        let scaledDelta = delta * sensitivityScale
+
+        if !isPrecise {
+            /*
+            // 旧版滚轮跟手 + 定时器 snap 逻辑（保留注释，便于后续对比）
+            wheelSnapTimer?.invalidate()
+
+            // 累积滚动量
+            wheelAccumulatedDelta += scaledDelta * 8  // 放大系数，让跟手效果更明显
+
+            // 计算临时偏移（带橡皮筋效果）
+            let pageStride = bounds.width + pageSpacing
+            let baseOffset = -CGFloat(currentPage) * pageStride
+            var newOffset = baseOffset + wheelAccumulatedDelta
+
+            // 橡皮筋效果：边界阻力
+            let minOffset = -CGFloat(pageCount - 1) * pageStride
+            let maxOffset: CGFloat = 0
+            if newOffset > maxOffset {
+                let overscroll = newOffset - maxOffset
+                newOffset = maxOffset + rubberBand(overscroll, limit: bounds.width * 0.15)
+            } else if newOffset < minOffset {
+                let overscroll = newOffset - minOffset
+                newOffset = minOffset + rubberBand(overscroll, limit: bounds.width * 0.15)
+            }
+
+            // 更新显示
+            scrollOffset = newOffset
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            pageContainerLayer.transform = CATransform3DMakeTranslation(scrollOffset, 0, 0)
+            syncFolderGlass(geometryChanged: false)
+            CATransaction.commit()
+
+            // 设置定时器，停止滚动后决定翻页或弹回
+            wheelSnapTimer = Timer.scheduledTimer(withTimeInterval: wheelSnapDelay, repeats: false) { [weak self] _ in
+                guard let self = self else { return }
+
+                let threshold = self.bounds.width * 0.15  // 15% 触发翻页
+                var targetPage = self.currentPage
+
+                if self.wheelAccumulatedDelta < -threshold {
+                    targetPage = self.currentPage + 1
+                } else if self.wheelAccumulatedDelta > threshold {
+                    targetPage = self.currentPage - 1
+                }
+
+                self.wheelAccumulatedDelta = 0
+                self.navigateToPage(targetPage, animated: true)
+            }
+            */
+
+            // Mouse wheel paging keeps its own reverse setting.
+            handleWheelPaging(with: scaledDelta)
+            return
+        }
+
+        // 触控板滑动
+        switch event.phase {
+        case .began:
+            isDragging = true
+            isScrollAnimating = false
+            dragStartOffset = scrollOffset
+            accumulatedDelta = 0
+            scrollVelocity = 0
+
+        case .changed:
+            accumulatedDelta += scaledDelta
+
+            // 计算新的偏移量
+            var newOffset = dragStartOffset + accumulatedDelta
+
+            // 橡皮筋效果：在边界处添加阻力
+            let pageStride = bounds.width + pageSpacing
+            let minOffset = -CGFloat(pageCount - 1) * pageStride
+            let maxOffset: CGFloat = 0
+
+            if newOffset > maxOffset {
+                // 超出左边界
+                let overscroll = newOffset - maxOffset
+                newOffset = maxOffset + rubberBand(overscroll, limit: bounds.width * 0.2)
+            } else if newOffset < minOffset {
+                // 超出右边界
+                let overscroll = newOffset - minOffset
+                newOffset = minOffset + rubberBand(overscroll, limit: bounds.width * 0.2)
+            }
+
+            scrollOffset = newOffset
+
+            // 性能优化：使用 CATransaction 批量更新
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            CATransaction.setAnimationDuration(0)
+            pageContainerLayer.transform = CATransform3DMakeTranslation(scrollOffset, 0, 0)
+            syncFolderGlass(geometryChanged: false)
+            CATransaction.commit()
+
+        case .ended, .cancelled:
+            isDragging = false
+
+            // 根据滑动距离和速度确定目标页面
+            let velocity = (abs(deltaX) > abs(deltaY) ? deltaX : verticalDelta) * sensitivityScale
+            let threshold = (bounds.width + pageSpacing) * 0.15  // 15% 即可触发翻页
+            let velocityThreshold: CGFloat = 30
+            var targetPage = currentPage
+
+            // 根据累计滑动方向决定翻页
+            if accumulatedDelta < -threshold || velocity < -velocityThreshold {
+                targetPage = currentPage + 1
+            } else if accumulatedDelta > threshold || velocity > velocityThreshold {
+                targetPage = currentPage - 1
+            }
+
+            navigateToPage(targetPage)
+
+        default:
+            break
+        }
+    }
+
+    private func handleWheelPaging(with scaledDelta: CGFloat) {
+        guard scaledDelta != 0 else { return }
+
+        let direction = scaledDelta > 0 ? 1 : -1
+        let effectiveDirection = reverseWheelPagingDirection ? -direction : direction
+        if wheelLastDirection != direction {
+            wheelAccumulatedDelta = 0
+        }
+        wheelLastDirection = direction
+        wheelAccumulatedDelta += abs(scaledDelta)
+
+        // 固定阈值，灵敏度变化已反映在 scaledDelta
+        let threshold: CGFloat = 2.0
+        guard wheelAccumulatedDelta >= threshold else { return }
+
+        let now = Date()
+        if let last = wheelLastFlipAt, now.timeIntervalSince(last) < wheelFlipCooldown {
+            return
+        }
+
+        // Keep existing CA direction semantics by default; optional override flips wheel-only paging.
+        let targetPage = effectiveDirection > 0 ? currentPage - 1 : currentPage + 1
+        wheelLastFlipAt = now
+        wheelAccumulatedDelta = 0
+        navigateToPage(targetPage, animated: true)
+    }
+
+    private func preciseVerticalDelta(from deltaY: CGFloat, isPrecise: Bool) -> CGFloat {
+        guard isPrecise else { return -deltaY }
+        return trackpadVerticalDirection == .natural ? deltaY : -deltaY
+    }
+
+    func rubberBand(_ offset: CGFloat, limit: CGFloat) -> CGFloat {
+        let factor: CGFloat = 0.5
+        let absOffset = abs(offset)
+        let scaled = (factor * absOffset * limit) / (absOffset + limit)
+        return offset >= 0 ? scaled : -scaled
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard !externalAppDragSessionActive else { return }
+        finishFolderDissolve()
+        finishDragLanding()
+        // 确保成为第一响应者，这样后续的滚轮事件才能被接收
+        window?.makeFirstResponder(self)
+
+        let location = convert(event.locationInWindow, from: nil)
+        // print("🖱️ [CAGrid] mouseDown at \(location)")
+
+        if let (item, index) = itemAt(location) {
+            // print("🖱️ [CAGrid] Hit item: \(item.name) at index \(index)")
+            // Reopening a folder immediately after dismissal may be classified
+            // as a double click by AppKit; it is still a complete open gesture.
+            let isFolder: Bool
+            if case .folder = item { isFolder = true } else { isFolder = false }
+            if event.clickCount == 1 || isFolder {
+                // 添加点击效果动画
+                setPressedIndex(index)
+                dragStartPoint = location
+
+                // 启动长按计时器（用于开始拖拽）
+                // 注意：必须添加到 .common 模式，否则在鼠标追踪期间不会触发
+                longPressTimer?.invalidate()
+                let timer = Timer(timeInterval: longPressDuration, repeats: false) { [weak self] _ in
+                    self?.startDragging(item: item, index: index, at: location)
+                }
+                RunLoop.main.add(timer, forMode: .common)
+                longPressTimer = timer
+            }
+        } else {
+            // 点击空白区域 - 开始页面拖拽模式
+            // print("🖱️ [CAGrid] Hit empty area, starting page drag")
+            isPageDragging = true
+            pageDragStartX = location.x
+            pageDragStartOffset = scrollOffset
+            dragStartPoint = location
+        }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        if externalAppDragSessionActive { return }
+        let location = convert(event.locationInWindow, from: nil)
+
+        // 页面拖拽模式
+        if isPageDragging {
+            let deltaX = location.x - pageDragStartX
+            var newOffset = pageDragStartOffset + deltaX
+
+            // 橡皮筋效果 - 在边界处添加阻力
+            let pageStride = bounds.width + pageSpacing
+            let minOffset = -CGFloat(pageCount - 1) * pageStride
+            let maxOffset: CGFloat = 0
+
+            if newOffset > maxOffset {
+                let overscroll = newOffset - maxOffset
+                newOffset = maxOffset + rubberBand(overscroll, limit: bounds.width * 0.3)
+            } else if newOffset < minOffset {
+                let overscroll = newOffset - minOffset
+                newOffset = minOffset + rubberBand(overscroll, limit: bounds.width * 0.3)
+            }
+
+            scrollOffset = newOffset
+
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            pageContainerLayer.transform = CATransform3DMakeTranslation(scrollOffset, 0, 0)
+            syncFolderGlass(geometryChanged: false)
+            CATransaction.commit()
+            return
+        }
+
+        // Check if moved enough distance to start dragging
+        if !isDraggingItem, let idx = pressedIndex {
+            if isLayoutLocked { return }
+            let distance = hypot(location.x - dragStartPoint.x, location.y - dragStartPoint.y)
+            if distance > 10 {
+                // 取消长按计时器，立即开始拖拽
+                longPressTimer?.invalidate()
+                longPressTimer = nil
+                if let item = items[safe: idx] {
+                    startDragging(item: item, index: idx, at: location)
+                }
+            }
+        }
+
+        // 更新拖拽位置
+        if isDraggingItem {
+            let dragDelta = CGPoint(x: location.x - dragCurrentPoint.x,
+                                    y: location.y - dragCurrentPoint.y)
+            if let app = externalDockDragCandidate(),
+               shouldStartExternalDockDrag(localPoint: location,
+                                           windowPoint: event.locationInWindow,
+                                           dragDelta: dragDelta) {
+                startExternalDockDrag(for: app, event: event, at: location)
+                return
+            }
+            optionKeyDown = optionGroupingEnabled && event.modifierFlags.contains(.option)
+            updateDragging(at: location)
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if externalAppDragSessionActive { return }
+        let location = convert(event.locationInWindow, from: nil)
+
+        // 取消长按计时器
+        longPressTimer?.invalidate()
+        longPressTimer = nil
+
+        // 结束页面拖拽
+        if isPageDragging {
+            isPageDragging = false
+
+            let totalDrag = location.x - pageDragStartX
+            let threshold = (bounds.width + pageSpacing) * 0.15  // 15% 即可触发翻页
+
+            var targetPage = currentPage
+            if totalDrag < -threshold {
+                // 向左拖 -> 下一页
+                targetPage = min(currentPage + 1, pageCount - 1)
+            } else if totalDrag > threshold {
+                // 向右拖 -> 上一页
+                targetPage = max(currentPage - 1, 0)
+            }
+
+            // 如果没有实际拖动（只是点击），则关闭窗口
+            if abs(totalDrag) < 5 {
+                onEmptyAreaClicked?()
+                return
+            }
+
+            navigateToPage(targetPage, animated: true)
+            return
+        }
+
+        if isDraggingItem {
+            // 结束拖拽
+            endDragging(at: location)
+        } else if let idx = pressedIndex {
+            // 恢复点击效果
+            setPressedIndex(nil)
+
+            // 检查是否在同一个 item 上释放
+            if let (item, index) = itemAt(location), index == idx {
+                if isBatchSelectionMode {
+                    if case .app(let app) = item {
+                        toggleBatchSelection(forAppPath: app.url.path)
+                    }
+                } else {
+                    if case .folder = item {
+                        onItemClicked?(item, index)
+                        return
+                    }
+                    // 延迟一点点再触发，让动画效果更明显
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                        self?.onItemClicked?(item, index)
+                    }
+                }
+            }
+        }
+    }
+
+
+    func setPressedIndex(_ newIndex: Int?, animated: Bool = true) {
+        let oldIndex = pressedIndex
+        guard oldIndex != newIndex else { return }
+
+        pressedIndex = newIndex
+        if let oldIndex {
+            applyScaleForIndex(oldIndex, animated: animated)
+        }
+        if let newIndex {
+            applyScaleForIndex(newIndex, animated: animated)
+        }
+    }
+
+    // MARK: - Drag and Drop
+
+    func startDragging(item: LaunchpadItem, index: Int, at point: CGPoint) {
+        guard !isLayoutLocked else { return }
+        if isBatchSelectionMode {
+            guard case .app(let app) = item else { return }
+            let dragPath = app.url.path
+            let orderedBatch = orderedBatchDragPaths(leadingAppPath: dragPath)
+            guard !orderedBatch.isEmpty else { return }
+            batchDraggingAppPathsOrdered = orderedBatch
+            batchHiddenCompanionIndices = orderedBatch
+                .compactMap { globalIndex(forAppPath: $0) }
+                .filter { $0 != index }
+        } else {
+            // Allow dragging apps and folders in normal mode.
+            switch item {
+            case .app, .folder:
+                break
+            case .empty, .missingApp:
+                return
+            }
+            batchDraggingAppPathsOrdered.removeAll()
+            batchHiddenCompanionIndices.removeAll()
+        }
+
+        dragDropPreview = .none
+        pendingDropPreview = nil
+        hoverUpdateTimer?.invalidate()
+        hoverUpdateTimer = nil
+        pendingHoverIndex = nil
+        currentHoverIndex = nil
+        clearDropTargetHighlight()
+        clearHover()
+        updateSelection(nil, animated: false)
+        isDraggingItem = true
+        draggingIndex = index
+        draggingItem = item
+        dragCurrentPoint = point
+
+        // 恢复按压效果
+        if pressedIndex != nil {
+            setPressedIndex(nil)
+        }
+
+        // Hand off the source to the drag preview atomically. A default opacity
+        // animation would leave the old CA icon visible beneath the new glass.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        // 隐藏原图标
+        let pageIndex = index / itemsPerPage
+        let localIndex = index % itemsPerPage
+        if pageIndex < iconLayers.count, localIndex < iconLayers[pageIndex].count {
+            iconLayers[pageIndex][localIndex].removeAnimation(forKey: "opacity")
+            iconLayers[pageIndex][localIndex].opacity = 0
+        }
+        if !batchHiddenCompanionIndices.isEmpty {
+            for companionIndex in batchHiddenCompanionIndices {
+                let companionPage = companionIndex / itemsPerPage
+                let companionLocal = companionIndex % itemsPerPage
+                if companionPage < iconLayers.count, companionLocal < iconLayers[companionPage].count {
+                    iconLayers[companionPage][companionLocal].removeAnimation(forKey: "opacity")
+                }
+                setOpacity(0, forGlobalIndex: companionIndex)
+            }
+        }
+
+        // 创建拖拽图层
+        createDraggingLayer(for: item, at: point)
+        CATransaction.commit()
+
+        if isBatchDragging {
+            pendingHoverIndex = gridPositionAt(point)
+            applyIconPositionUpdate()
+        }
+
+        // print("🎯 [CAGrid] Started dragging: \(item.name) at index \(index)")
+    }
+
+    func createDraggingLayer(for item: LaunchpadItem, at point: CGPoint) {
+        let actualIconSize = iconSize
+        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
+        
+        // Container for dragging (holds glass + icon for folders)
+        let container = CALayer()
+        container.frame = CGRect(x: point.x - actualIconSize / 2, y: point.y - actualIconSize / 2,
+                            width: actualIconSize, height: actualIconSize)
+        container.transform = CATransform3DMakeScale(1.1, 1.1, 1.0)
+        container.zPosition = 1000
+
+        // For folders, add glass background
+        if case .folder = item {
+            let glassSize = actualIconSize * 0.8
+            let glassOffset = (actualIconSize - glassSize) / 2
+            let glassLayer = CALayer()
+            glassLayer.name = "glass"
+            glassLayer.frame = CGRect(x: glassOffset, y: glassOffset, width: glassSize, height: glassSize)
+            glassLayer.backgroundColor = NSColor.white.withAlphaComponent(0.08).cgColor
+            glassLayer.borderColor = NSColor.white.withAlphaComponent(0.2).cgColor
+            glassLayer.borderWidth = 0.5
+            glassLayer.cornerRadius = glassSize * 0.25
+            glassLayer.shadowColor = NSColor.black.cgColor
+            glassLayer.shadowOffset = CGSize(width: 0, height: -1)
+            glassLayer.shadowRadius = 3
+            glassLayer.shadowOpacity = 0.15
+            container.addSublayer(glassLayer)
+        }
+
+        // Icon layer
+        let iconLayer = CALayer()
+        iconLayer.name = "icon"
+        iconLayer.frame = CGRect(x: 0, y: 0, width: actualIconSize, height: actualIconSize)
+        iconLayer.contentsScale = scale
+        iconLayer.contentsGravity = .resizeAspect
+        iconLayer.shadowOpacity = 0
+
+        // Set icon content with high resolution
+        if case .app(let app) = item {
+            let icon = IconStore.shared.icon(forPath: app.url.path)
+            let renderSize = NSSize(width: actualIconSize * scale, height: actualIconSize * scale)
+            let renderedImage = NSImage(size: renderSize)
+            renderedImage.lockFocus()
+            icon.draw(in: NSRect(origin: .zero, size: renderSize))
+            renderedImage.unlockFocus()
+            if let cgImage = renderedImage.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                iconLayer.contents = cgImage
+            }
+        } else if case .folder(let folder) = item {
+            let icon = folder.icon(of: actualIconSize, scale: folderPreviewScale)
+            let renderSize = NSSize(width: actualIconSize * scale, height: actualIconSize * scale)
+            let renderedImage = NSImage(size: renderSize)
+            renderedImage.lockFocus()
+            icon.draw(in: NSRect(origin: .zero, size: renderSize))
+            renderedImage.unlockFocus()
+            if let cgImage = renderedImage.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                iconLayer.contents = cgImage
+            }
+        }
+
+        container.addSublayer(iconLayer)
+
+        if case .app = item, batchDraggingAppPathsOrdered.count > 1 {
+            addBatchDragCountBadge(to: container, count: batchDraggingAppPathsOrdered.count)
+        }
+
+        // Keep dragged apps above the native folder backplates, too.
+        (usesLiquidGlassFolders ? layer : containerLayer)?.addSublayer(container)
+        draggingLayer = container
+        syncFolderGlass()
+    }
+
+    func externalDockDragCandidate() -> AppInfo? {
+        guard !isBatchDragging else { return nil }
+        guard case .app(let app) = draggingItem else { return nil }
+        let path = app.url.path
+        guard !path.isEmpty else { return nil }
+        guard app.url.pathExtension.lowercased() == "app" else { return nil }
+        guard FileManager.default.fileExists(atPath: path) else { return nil }
+        return app
+    }
+
+    func shouldStartExternalDockDrag(localPoint point: CGPoint, windowPoint: CGPoint, dragDelta: CGPoint) -> Bool {
+        guard let contentView = window?.contentView else { return false }
+        guard dockDragEnabled else { return false }
+
+        switch dockDragSide {
+        case .disabled:
+            return false
+        case .bottom:
+            let movingTowardDock = dragDelta.y < -1.5
+            let nearBottomEdge = windowPoint.y <= contentView.bounds.minY + externalAppDragTriggerDistance
+            let isInsideHorizontalRange =
+                windowPoint.x >= contentView.bounds.minX - externalAppDragOutset &&
+                windowPoint.x <= contentView.bounds.maxX + externalAppDragOutset
+            return movingTowardDock && nearBottomEdge && isInsideHorizontalRange
+
+        case .left:
+            let movingTowardDock = dragDelta.x < -1.5
+            let nearLeftEdge = windowPoint.x <= contentView.bounds.minX + externalAppDragTriggerDistance
+            let isInsideVerticalRange =
+                windowPoint.y >= contentView.bounds.minY - externalAppDragOutset &&
+                windowPoint.y <= contentView.bounds.maxY + externalAppDragOutset
+            return movingTowardDock && nearLeftEdge && isInsideVerticalRange
+
+        case .right:
+            let movingTowardDock = dragDelta.x > 1.5
+            let nearRightEdge = windowPoint.x >= contentView.bounds.maxX - externalAppDragTriggerDistance
+            let isInsideVerticalRange =
+                windowPoint.y >= contentView.bounds.minY - externalAppDragOutset &&
+                windowPoint.y <= contentView.bounds.maxY + externalAppDragOutset
+            return movingTowardDock && nearRightEdge && isInsideVerticalRange
+        }
+    }
+
+    func startExternalDockDrag(for app: AppInfo, event: NSEvent, at point: CGPoint) {
+        guard !externalAppDragSessionActive else { return }
+
+        clearDropTargetHighlight()
+        cancelEdgeDragTimer()
+
+        let writer = app.url as NSURL
+        let draggingItem = NSDraggingItem(pasteboardWriter: writer)
+
+        let dragImage = renderedExternalDockDragPreview(for: app)
+        let frame = CGRect(x: point.x - iconSize / 2,
+                           y: point.y - iconSize / 2,
+                           width: iconSize,
+                           height: iconSize)
+        draggingItem.setDraggingFrame(frame, contents: dragImage)
+
+        cancelDragging()
+
+        externalAppDragSessionActive = true
+        AppDelegate.shared?.beginExternalSystemDragSession()
+
+        let session = beginDraggingSession(with: [draggingItem], event: event, source: self)
+        session.draggingFormation = .none
+        session.animatesToStartingPositionsOnCancelOrFail = true
+    }
+
+    func renderedExternalDockDragPreview(for app: AppInfo) -> NSImage {
+        let icon = IconStore.shared.icon(forPath: app.url.path)
+        let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+        let renderSize = NSSize(width: iconSize * scale, height: iconSize * scale)
+        let renderedImage = NSImage(size: renderSize)
+        renderedImage.lockFocus()
+        icon.draw(in: NSRect(origin: .zero, size: renderSize),
+                  from: .zero,
+                  operation: .copy,
+                  fraction: 1.0)
+        renderedImage.unlockFocus()
+        renderedImage.size = NSSize(width: iconSize, height: iconSize)
+        return renderedImage
+    }
+
+    func addBatchDragCountBadge(to container: CALayer, count: Int) {
+        let badgeSize: CGFloat = 22
+        let badge = CALayer()
+        badge.name = "batchDragCountBadge"
+        badge.frame = CGRect(x: container.bounds.width - badgeSize * 0.9,
+                             y: container.bounds.height - badgeSize * 0.95,
+                             width: badgeSize,
+                             height: badgeSize)
+        badge.cornerRadius = badgeSize * 0.5
+        badge.backgroundColor = NSColor.systemBlue.cgColor
+        badge.borderColor = NSColor.white.withAlphaComponent(0.85).cgColor
+        badge.borderWidth = 1
+        badge.zPosition = 40
+
+        let text = CATextLayer()
+        text.string = "\(count)"
+        text.alignmentMode = .center
+        text.font = NSFont.systemFont(ofSize: 11, weight: .bold)
+        text.fontSize = 11
+        text.foregroundColor = NSColor.white.cgColor
+        text.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
+        text.frame = CGRect(x: 0, y: 4, width: badgeSize, height: badgeSize - 6)
+        badge.addSublayer(text)
+        container.addSublayer(badge)
+    }
+
+    func updateDragging(at point: CGPoint) {
+        defer { syncFolderGlass(geometryChanged: false) }
+        dragCurrentPoint = point
+
+        // Update dragging layer position
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        // Updating frame under the lift transform also changes bounds. Keep the
+        // bitmap size stable so the drop can smoothly shrink from the lift scale.
+        draggingLayer?.position = point
+        CATransaction.commit()
+
+        // Check edge drag for page flip
+        checkEdgeDrag(at: point)
+
+        if isBatchDragging {
+            if let hoverIndex = gridPositionAt(point), hoverIndex != draggingIndex {
+                clearDropTargetHighlight()
+                updateIconPositionsForDrag(hoverIndex: hoverIndex)
+            } else {
+                clearDropTargetHighlight()
+                updateIconPositionsForDrag(hoverIndex: nil)
+            }
+            return
+        }
+
+        guard let sourceIndex = draggingIndex else { return }
+        let preview: GridDropPreview
+        if let hoverIndex = gridPositionAt(point), hoverIndex != draggingIndex {
+            if items.indices.contains(hoverIndex), case .app = draggingItem,
+               isPointInFolderDropZone(point, targetIndex: hoverIndex) {
+                switch items[hoverIndex] {
+                case .app, .folder:
+                    preview = .merge(targetID: items[hoverIndex].id)
+                case .missingApp, .empty:
+                    preview = optionGroupingEnabled && optionKeyDown
+                        ? .none
+                        : .insertion(index: hoverIndex, sourceIndex: sourceIndex,
+                                     itemCount: items.count, itemsPerPage: itemsPerPage)
+                }
+            } else {
+                preview = optionGroupingEnabled && optionKeyDown
+                    ? .none
+                    : .insertion(index: hoverIndex, sourceIndex: sourceIndex,
+                                 itemCount: items.count, itemsPerPage: itemsPerPage)
+            }
+        } else {
+            preview = .none
+        }
+        if optionGroupingEnabled && optionKeyDown {
+            // Option grouping must not reflow the surrounding icons.
+            clearDropTargetHighlight(preservingCreation: preview != .none)
+            requestDropPreview(preview)
+        } else {
+            requestDropPreview(preview)
+        }
+    }
+
+    func updateIconPositionsForDrag(hoverIndex: Int?) {
+        guard draggingIndex != nil else { return }
+        
+        // Skip if same as pending or current
+        if hoverIndex == pendingHoverIndex { return }
+        
+        // Store pending hover index
+        pendingHoverIndex = hoverIndex
+        
+        // Cancel previous timer
+        hoverUpdateTimer?.invalidate()
+        
+        // Schedule delayed update to prevent jittering during fast movement
+        hoverUpdateTimer = Timer.scheduledTimer(withTimeInterval: hoverUpdateDelay, repeats: false) { [weak self] _ in
+            self?.applyIconPositionUpdate()
+        }
+    }
+    
+    func applyIconPositionUpdate() {
+        guard let dragIndex = draggingIndex else { return }
+        
+        let hoverIndex = pendingHoverIndex
+        
+        // Batch mode always recomputes compaction so selected gaps are closed immediately.
+        if !isBatchDragging, hoverIndex == currentHoverIndex { return }
+        currentHoverIndex = hoverIndex
+        
+        // Get current page icons only
+        let pageIndex = currentPage
+        guard pageIndex < iconLayers.count else { return }
+        // Only position updates need a new glass sampling interval. Preserve
+        // an existing deadline when there is no drag, no change, or no page.
+        defer { animateFolderGlass() }
+        let pageLayers = iconLayers[pageIndex]
+        let pageStart = pageIndex * itemsPerPage
+
+        ensureOriginalPositionsForCurrentPage(pageLayers: pageLayers, pageStart: pageStart)
+        
+        if isBatchDragging {
+            applyBatchCompactedPositions(pageLayers: pageLayers, pageStart: pageStart, dragIndex: dragIndex)
+            return
+        }
+        
+        // Calculate positions with item shifted - smooth spring-like animation
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        
+        for (localIndex, layer) in pageLayers.enumerated() {
+            let globalIndex = pageStart + localIndex
+            
+            // Skip the dragging item's original layer - hide it completely
+            if globalIndex == dragIndex {
+                layer.opacity = 0
+                continue
+            }
+            
+            guard let originalPos = originalIconPositions[globalIndex] else { continue }
+            
+            var targetPos = originalPos
+            
+            if let hover = hoverIndex {
+                let hoverLocalIndex = hover - pageStart
+                let dragLocalIndex = dragIndex - pageStart
+                let dragInThisPage = dragIndex >= pageStart && dragIndex < pageStart + itemsPerPage
+                
+                // Only affect items on current page
+                if hover >= pageStart && hover < pageStart + itemsPerPage {
+                    
+                    if dragInThisPage {
+                        if dragLocalIndex < hoverLocalIndex {
+                            // Dragging forward: items between drag and hover shift left
+                            if localIndex > dragLocalIndex && localIndex <= hoverLocalIndex {
+                                if let prevPos = originalIconPositions[pageStart + localIndex - 1] {
+                                    targetPos = prevPos
+                                }
+                            }
+                        } else if dragLocalIndex > hoverLocalIndex {
+                            // Dragging backward: items between hover and drag shift right
+                            if localIndex >= hoverLocalIndex && localIndex < dragLocalIndex {
+                                if let nextPos = originalIconPositions[pageStart + localIndex + 1] {
+                                    targetPos = nextPos
+                                }
+                            }
+                        }
+                    } else {
+                        // Dragging from another page: create a gap on the hover page by shifting items to the right.
+                        if localIndex >= hoverLocalIndex {
+                            let targetGlobalIndex = pageStart + localIndex + 1
+                            targetPos = gridCenterForGlobalIndex(targetGlobalIndex)
+                        }
+                    }
+                }
+            }
+            
+            GridLayerMotion.move(layer, to: targetPos, duringHover: true)
+        }
+        
+        CATransaction.commit()
+    }
+
+    func applyBatchCompactedPositions(pageLayers: [CALayer], pageStart: Int, dragIndex: Int) {
+        let pageEnd = pageStart + pageLayers.count
+        let removedIndices = Set(batchHiddenCompanionIndices + [dragIndex]).filter { $0 >= pageStart && $0 < pageEnd }
+        let removedLocals = Set(removedIndices.map { $0 - pageStart })
+
+        var nonEmptyLocals: [Int] = []
+        var emptyLocals: [Int] = []
+        for localIndex in 0..<pageLayers.count {
+            guard !removedLocals.contains(localIndex) else { continue }
+            let globalIndex = pageStart + localIndex
+            if globalIndex < items.count, case .empty = items[globalIndex] {
+                emptyLocals.append(localIndex)
+            } else {
+                nonEmptyLocals.append(localIndex)
+            }
+        }
+        let compactedLocals = nonEmptyLocals + emptyLocals
+
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0.25)
+        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(controlPoints: 0.25, 0.9, 0.35, 1.0))
+
+        for (targetLocalIndex, sourceLocalIndex) in compactedLocals.enumerated() {
+            let layer = pageLayers[sourceLocalIndex]
+            let targetGlobalIndex = pageStart + targetLocalIndex
+            let targetPosition = originalIconPositions[targetGlobalIndex] ?? gridCenterForGlobalIndex(targetGlobalIndex)
+            layer.position = targetPosition
+            layer.opacity = 1
+        }
+
+        for removedLocalIndex in removedLocals {
+            pageLayers[removedLocalIndex].opacity = 0
+        }
+
+        CATransaction.commit()
+    }
+
+    func gridCenterForGlobalIndex(_ globalIndex: Int) -> CGPoint {
+        guard bounds.width > 0, bounds.height > 0 else { return .zero }
+
+        let pageWidth = bounds.width
+        let pageHeight = bounds.height
+        let pageStride = pageWidth + pageSpacing
+        let pageIndex = max(0, globalIndex / itemsPerPage)
+        let localIndex = max(0, globalIndex % itemsPerPage)
+
+        let availableWidth = max(0, pageWidth - contentInsets.left - contentInsets.right)
+        let availableHeight = max(0, pageHeight - contentInsets.top - contentInsets.bottom)
+        let totalColumnSpacing = columnSpacing * CGFloat(max(columns - 1, 0))
+        let totalRowSpacing = rowSpacing * CGFloat(max(rows - 1, 0))
+        let usableWidth = max(0, availableWidth - totalColumnSpacing)
+        let usableHeight = max(0, availableHeight - totalRowSpacing)
+        let cellWidth = usableWidth / CGFloat(max(columns, 1))
+        let cellHeight = usableHeight / CGFloat(max(rows, 1))
+        let strideX = cellWidth + columnSpacing
+
+        let col = localIndex % columns
+        let row = localIndex / columns
+
+        let cellOriginX = contentInsets.left + CGFloat(col) * strideX
+        let cellOriginY = pageHeight - contentInsets.top - CGFloat(row + 1) * cellHeight - CGFloat(row) * rowSpacing
+
+        let actualIconSize = iconSize
+        let labelHeight: CGFloat = showLabels ? labelFontSize + 8 : 0
+        let labelTopSpacing: CGFloat = showLabels ? 6 : 0
+        let totalHeight = actualIconSize + labelTopSpacing + labelHeight
+
+        let containerX = CGFloat(pageIndex) * pageStride + cellOriginX
+        let containerY = cellOriginY + (cellHeight - totalHeight) / 2
+        return CGPoint(x: containerX + cellWidth / 2, y: containerY + totalHeight / 2)
+    }
+    
+    func resetIconPositions() {
+        defer {
+            hideDragLandingDestination()
+            animateFolderGlass()
+        }
+        // Cancel pending update timer
+        hoverUpdateTimer?.invalidate()
+        hoverUpdateTimer = nil
+        pendingHoverIndex = nil
+        
+        guard !originalIconPositions.isEmpty else { 
+            // Even if we never captured original positions, make sure the hidden drag source is restored
+            if let dragIndex = draggingIndex {
+                let pageIndex = dragIndex / itemsPerPage
+                let localIndex = dragIndex % itemsPerPage
+                if pageIndex < iconLayers.count, localIndex < iconLayers[pageIndex].count {
+                    iconLayers[pageIndex][localIndex].opacity = 1.0
+                }
+            }
+            currentHoverIndex = nil
+            return 
+        }
+        
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0.3)
+        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(controlPoints: 0.25, 0.1, 0.25, 1.0))
+        
+        for (pageIndex, pageLayers) in iconLayers.enumerated() {
+            let pageStart = pageIndex * itemsPerPage
+            for (localIndex, layer) in pageLayers.enumerated() {
+                let globalIndex = pageStart + localIndex
+                if let originalPos = originalIconPositions[globalIndex] {
+                    layer.position = originalPos
+                }
+                layer.opacity = 1.0
+            }
+        }
+        
+        CATransaction.commit()
+        
+        originalIconPositions.removeAll()
+        currentHoverIndex = nil
+    }
+
+    func updateHoverIndex(_ newIndex: Int?) {
+        guard hoveredIndex != newIndex else { return }
+        let old = hoveredIndex
+        hoveredIndex = newIndex
+        if let old = old {
+            applyScaleForIndex(old, animated: true)
+        }
+        if let newIndex = newIndex {
+            applyScaleForIndex(newIndex, animated: true)
+        }
+    }
+
+    func clearHover() {
+        updateHoverIndex(nil)
+    }
+
+    func updateLabelFonts() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for pageLayers in iconLayers {
+            for containerLayer in pageLayers {
+                if let textLayer = containerLayer.sublayers?.first(where: { $0.name == "label" }) as? CATextLayer {
+                    textLayer.font = NSFont.systemFont(ofSize: labelFontSize, weight: labelFontWeight)
+                    textLayer.fontSize = labelFontSize
+                }
+            }
+        }
+        CATransaction.commit()
+    }
+
+    func updateLabelVisibility() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for pageLayers in iconLayers {
+            for containerLayer in pageLayers {
+                if let textLayer = containerLayer.sublayers?.first(where: { $0.name == "label" }) as? CATextLayer {
+                    textLayer.isHidden = !showLabels
+                }
+            }
+        }
+        CATransaction.commit()
+        updateLayout()
+    }
+
+    func setBackgroundLabelContrast(_ sample: BackgroundLabelContrast?, tints: [BackgroundLabelContrast.Tint]) {
+        guard backgroundLabelSample !== sample || backgroundLabelTints != tints else { return }
+        backgroundLabelSample = sample
+        backgroundLabelTints = tints
+        backgroundLabelDarkAppearance = nil
+        updateLabelColors()
+    }
+
+    func updateLabelColors() {
+        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        if backgroundLabelDarkAppearance != dark {
+            backgroundLabelDarkAppearance = dark
+            let style = backgroundLabelSample?.resolvedStyle(darkAppearance: dark, tints: backgroundLabelTints)
+            backgroundLabelColor = style.map { $0.usesWhiteText ? .white : .black }
+            backgroundLabelShadow = style?.shadow ?? .none
+        }
+        let color = currentLabelColor().cgColor
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for pageLayers in iconLayers {
+            for container in pageLayers {
+                guard let text = container.sublayers?.first(where: { $0.name == "label" }) as? CATextLayer else { continue }
+                if text.foregroundColor != color { text.foregroundColor = color }
+                BackgroundLabelContrast.applyLabelShadow(to: text, style: backgroundLabelShadow)
+            }
+        }
+        CATransaction.commit()
+    }
+
+    func updateFolderGlassColors() {
+        let colors = currentFolderGlassStyle()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for pageLayers in iconLayers {
+            for containerLayer in pageLayers {
+                if let glassLayer = containerLayer.sublayers?.first(where: { $0.name == "glass" }) {
+                    glassLayer.backgroundColor = colors.background.cgColor
+                    glassLayer.borderColor = colors.border.cgColor
+                    glassLayer.shadowOffset = colors.shadowOffset
+                    glassLayer.shadowRadius = colors.shadowRadius
+                    glassLayer.shadowOpacity = colors.shadowOpacity
+                }
+            }
+        }
+        CATransaction.commit()
+    }
+
+    func currentLabelColor() -> NSColor {
+        if let forcedLabelColor { return forcedLabelColor }
+        if let backgroundLabelColor { return backgroundLabelColor }
+        let match = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua])
+        return match == .darkAqua ? .white : .black
+    }
+
+    func isPointInFolderDropZone(_ point: CGPoint, targetIndex: Int) -> Bool {
+        guard let center = iconCenter(for: targetIndex) else { return false }
+        let size = iconSize * folderDropZoneScale
+        let rect = CGRect(x: center.x - size / 2,
+                          y: center.y - size / 2,
+                          width: size,
+                          height: size)
+        return rect.contains(point)
+    }
+
+    func iconCenter(for index: Int) -> CGPoint? {
+        guard bounds.width > 0, bounds.height > 0 else { return nil }
+        let pageIndex = index / itemsPerPage
+        let localIndex = index % itemsPerPage
+        guard pageIndex >= 0 && pageIndex < pageCount else { return nil }
+
+        let pageWidth = bounds.width
+        let pageHeight = bounds.height
+        let pageStride = pageWidth + pageSpacing
+
+        let availableWidth = max(0, pageWidth - contentInsets.left - contentInsets.right)
+        let availableHeight = max(0, pageHeight - contentInsets.top - contentInsets.bottom)
+        let totalColumnSpacing = columnSpacing * CGFloat(max(columns - 1, 0))
+        let totalRowSpacing = rowSpacing * CGFloat(max(rows - 1, 0))
+        let usableWidth = max(0, availableWidth - totalColumnSpacing)
+        let usableHeight = max(0, availableHeight - totalRowSpacing)
+        let cellWidth = usableWidth / CGFloat(max(columns, 1))
+        let cellHeight = usableHeight / CGFloat(max(rows, 1))
+        let strideX = cellWidth + columnSpacing
+
+        let col = localIndex % columns
+        let row = localIndex / columns
+
+        let cellOriginX = contentInsets.left + CGFloat(col) * strideX
+        let cellOriginY = pageHeight - contentInsets.top - CGFloat(row + 1) * cellHeight - CGFloat(row) * rowSpacing
+
+        let labelHeight: CGFloat = showLabels ? (labelFontSize + 8) : 0
+        let labelTopSpacing: CGFloat = showLabels ? 6 : 0
+        let totalHeight = iconSize + labelTopSpacing + labelHeight
+
+        let containerX = CGFloat(pageIndex) * pageStride + cellOriginX
+        let containerY = cellOriginY + (cellHeight - totalHeight) / 2
+
+        let iconX = containerX + (cellWidth - iconSize) / 2
+        let iconY = containerY + labelHeight + labelTopSpacing
+
+        let centerX = iconX + iconSize / 2 + scrollOffset
+        let centerY = iconY + iconSize / 2
+        return CGPoint(x: centerX, y: centerY)
+    }
+
+    func currentFolderGlassStyle() -> (background: NSColor, border: NSColor, shadowOpacity: Float, shadowRadius: CGFloat, shadowOffset: CGSize) {
+        let match = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua])
+        if match == .darkAqua {
+            return (NSColor.white.withAlphaComponent(0.08),
+                    NSColor.white.withAlphaComponent(0.2),
+                    0.15,
+                    3,
+                    CGSize(width: 0, height: -1))
+        }
+        return (NSColor.white.withAlphaComponent(0.7),
+                NSColor.white.withAlphaComponent(0.75),
+                0.2,
+                4,
+                CGSize(width: 0, height: -1))
+    }
+
+    func applyScaleForIndex(_ index: Int, animated: Bool) {
+        guard index >= 0, itemsPerPage > 0 else { return }
+        let pageIndex = index / itemsPerPage
+        let localIndex = index % itemsPerPage
+        guard pageIndex < iconLayers.count, localIndex < iconLayers[pageIndex].count else { return }
+
+        let containerLayer = iconLayers[pageIndex][localIndex]
+
+        let pressScale: CGFloat = (pressedIndex == index && activePressEffectEnabled) ? CGFloat(activePressScale) : 1.0
+
+        let selectionScale: CGFloat = 1.2
+        var iconScale: CGFloat = 1.0
+        if dropTargetIndex == index {
+            // Creating a folder expands only its temporary backplate.
+            iconScale = containerLayer.sublayers?.contains(where: { $0.name == "creationGlass" }) == true ? 1 : 1.1
+        } else if selectedIndex == index {
+            iconScale = selectionScale
+        } else if hoverMagnificationEnabled, hoveredIndex == index {
+            iconScale = hoverMagnificationScale
+        }
+
+        let iconLayer = containerLayer.sublayers?.first(where: { $0.name == "icon" })
+        let glassLayer = containerLayer.sublayers?.first(where: { $0.name == "glass" })
+        let containerTransform = CATransform3DMakeScale(pressScale, pressScale, 1.0)
+        let iconTransform = CATransform3DMakeScale(iconScale, iconScale, 1.0)
+        let containerChanged = !CATransform3DEqualToTransform(containerLayer.transform, containerTransform)
+        let iconChanged = iconLayer.map { !CATransform3DEqualToTransform($0.transform, iconTransform) } ?? false
+        let glassChanged = glassLayer.map { !CATransform3DEqualToTransform($0.transform, iconTransform) } ?? false
+        guard containerChanged || iconChanged || glassChanged else { return }
+        // Ordinary app hover/press/selection cannot move native folder glass.
+        // Only an actual folder geometry change needs to extend its sampling.
+        defer {
+            if glassLayer != nil, usesLiquidGlassFolders {
+                if animated { animateFolderGlass() } else { syncFolderGlass() }
+            }
+        }
+
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(animated ? 0.12 : 0)
+        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
+        containerLayer.transform = containerTransform
+
+        if let iconLayer {
+            iconLayer.transform = iconTransform
+        }
+        if let glassLayer {
+            glassLayer.transform = iconTransform
+        }
+        CATransaction.commit()
+    }
+
+    func updateSelection(_ index: Int?, animated: Bool = true) {
+        let clampedIndex: Int? = {
+            guard let index else { return nil }
+            guard index >= 0, index < items.count else { return nil }
+            if case .empty = items[index] { return nil }
+            return index
+        }()
+
+        guard selectedIndex != clampedIndex else {
+            updateSelectionBackgrounds()
+            return
+        }
+        let old = selectedIndex
+        selectedIndex = clampedIndex
+        if let old = old { applyScaleForIndex(old, animated: animated) }
+        if let newIndex = selectedIndex { applyScaleForIndex(newIndex, animated: animated) }
+        updateSelectionBackgrounds()
+    }
+
+    /// Draw the compact rounded selection plate behind the selected icon and
+    /// label. Buho keeps this layer separate from the icon transform.
+    func updateSelectionBackgrounds() {
+        guard !isDraggingItem else { return }
+        let selected = selectedIndex
+        for (pageIndex, layers) in iconLayers.enumerated() {
+            for (localIndex, container) in layers.enumerated() {
+                let shouldSelect = selected == pageIndex * itemsPerPage + localIndex
+                let existing = container.sublayers?.first(where: { $0.name == "selectionBackground" })
+                if shouldSelect {
+                    if existing == nil {
+                        let background = CALayer()
+                        background.name = "selectionBackground"
+                        background.zPosition = -1
+                        let icon = container.sublayers?.first(where: { $0.name == "icon" })
+                        let iconFrame = icon?.frame ?? container.bounds
+                        let width = max(iconFrame.width + 20, container.bounds.width - 12)
+                        let height = max(iconFrame.height + 20, container.bounds.height - 6)
+                        background.frame = CGRect(x: (container.bounds.width - width) / 2,
+                                                  y: (container.bounds.height - height) / 2,
+                                                  width: width,
+                                                  height: height)
+                        background.cornerRadius = 14
+                        background.backgroundColor = NSColor.white.withAlphaComponent(0.12).cgColor
+                        background.borderColor = NSColor.white.withAlphaComponent(0.22).cgColor
+                        background.borderWidth = 0.5
+                        container.insertSublayer(background, at: 0)
+                    }
+                } else if let existing {
+                    existing.removeFromSuperlayer()
+                }
+            }
+        }
+    }
+
+    func updateExternalDragState(sourceIndex: Int?, hoverIndex: Int?) {
+        // Avoid interfering with native CA drag.
+        guard !isDraggingItem else { return }
+        guard bounds.width > 0, bounds.height > 0 else { return }
+
+        if let sourceIndex = sourceIndex {
+            if !externalDragActive || draggingIndex != sourceIndex {
+                externalDragActive = true
+                draggingIndex = sourceIndex
+            }
+            // A model refresh can replace the source layer without changing
+            // its index. Reassert the handoff on every external-drag update.
+            let pageIndex = sourceIndex / itemsPerPage
+            let localIndex = sourceIndex % itemsPerPage
+            if pageIndex >= 0, localIndex >= 0,
+               pageIndex < iconLayers.count, localIndex < iconLayers[pageIndex].count {
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                iconLayers[pageIndex][localIndex].removeAnimation(forKey: "opacity")
+                iconLayers[pageIndex][localIndex].opacity = 0
+                CATransaction.commit()
+            }
+            updateIconPositionsForDrag(hoverIndex: hoverIndex)
+        } else if externalDragActive {
+            externalDragActive = false
+            draggingIndex = nil
+            resetIconPositions()
+        }
+    }
+
+    func ensureOriginalPositionsForCurrentPage(pageLayers: [CALayer], pageStart: Int) {
+        // If we already captured positions for this page, keep them.
+        var hasAny = false
+        for localIndex in 0..<pageLayers.count {
+            let globalIndex = pageStart + localIndex
+            if originalIconPositions[globalIndex] != nil {
+                hasAny = true
+                break
+            }
+        }
+        guard !hasAny else { return }
+
+        for (localIndex, layer) in pageLayers.enumerated() {
+            let globalIndex = pageStart + localIndex
+            originalIconPositions[globalIndex] = layer.position
+        }
+    }
+
+    // MARK: - 边缘翻页检测
+    func checkEdgeDrag(at point: CGPoint) {
+        let leftEdge = point.x < edgeDragThreshold
+        let rightEdge = point.x > bounds.width - edgeDragThreshold
+
+        if leftEdge && currentPage > 0 {
+            // 左边缘 - 翻到上一页
+            startEdgeDragTimer(direction: -1)
+        } else if rightEdge {
+            // 右边缘 - 翻到下一页（可能创建新页）
+            startEdgeDragTimer(direction: 1)
+        } else {
+            // 离开边缘区域 - 取消计时器
+            cancelEdgeDragTimer()
+        }
+    }
+
+    func startEdgeDragTimer(direction: Int) {
+        // 如果已有相同方向的计时器，不重复创建
+        if edgeDragTimer != nil { return }
+
+        let timer = Timer(timeInterval: edgeDragDelay, repeats: false) { [weak self] _ in
+            guard let self = self else { return }
+            let targetPage = self.currentPage + direction
+
+            // 检查是否需要创建新页面
+            if direction > 0 && targetPage >= self.pageCount {
+                // 通知创建新页面
+                self.onRequestNewPage?()
+            }
+
+            self.navigateToPage(targetPage, animated: true)
+            self.edgeDragTimer = nil
+
+            // 翻页后继续检测
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                guard let self = self, self.isDraggingItem else { return }
+                self.checkEdgeDrag(at: self.dragCurrentPoint)
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        edgeDragTimer = timer
+    }
+
+    func cancelEdgeDragTimer() {
+        edgeDragTimer?.invalidate()
+        edgeDragTimer = nil
+    }
+
+    func hardSnapToCurrentPage() {
+        guard bounds.width > 0 else { return }
+        resetScrollInteractionState()
+        isScrollAnimating = false
+        scrollAnimationStartTime = 0
+        let expectedOffset = -CGFloat(currentPage) * (bounds.width + pageSpacing)
+        scrollOffset = expectedOffset
+        targetScrollOffset = expectedOffset
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        CATransaction.setAnimationDuration(0)
+        pageContainerLayer.transform = CATransform3DMakeTranslation(scrollOffset, 0, 0)
+        syncFolderGlass(geometryChanged: false)
+        CATransaction.commit()
+    }
+
+    func resetScrollInteractionState() {
+        isDragging = false
+        accumulatedDelta = 0
+        wheelAccumulatedDelta = 0
+        wheelLastDirection = 0
+        wheelLastFlipAt = nil
+    }
+
+    /// 计算点击位置对应的网格位置（即使是空白区域）
+    func gridPositionAt(_ point: CGPoint) -> Int? {
+        let pageWidth = bounds.width
+        let pageHeight = bounds.height
+        let adjustedX = point.x - scrollOffset
+
+        // 计算点击的页面
+        let pageStride = pageWidth + pageSpacing
+        let pageIndex = Int(floor(adjustedX / pageStride))
+        guard pageIndex >= 0 else { return nil }
+        // 允许拖拽到最后一页之后（会创建新页）
+        let effectivePageIndex = min(pageIndex, max(0, pageCount - 1))
+
+        let availableWidth = max(0, pageWidth - contentInsets.left - contentInsets.right)
+        let availableHeight = max(0, pageHeight - contentInsets.top - contentInsets.bottom)
+        let totalColumnSpacing = columnSpacing * CGFloat(max(columns - 1, 0))
+        let totalRowSpacing = rowSpacing * CGFloat(max(rows - 1, 0))
+        let usableWidth = max(0, availableWidth - totalColumnSpacing)
+        let usableHeight = max(0, availableHeight - totalRowSpacing)
+        let cellWidth = usableWidth / CGFloat(max(columns, 1))
+        let cellHeight = usableHeight / CGFloat(max(rows, 1))
+        let strideX = cellWidth + columnSpacing
+        let strideY = cellHeight + rowSpacing
+
+        // 计算点击位置相对于当前页的坐标
+        let pageX = adjustedX - CGFloat(effectivePageIndex) * pageStride
+        guard pageX >= 0, pageX <= pageWidth else { return nil }
+        let localX = pageX - contentInsets.left
+        let localY = pageHeight - point.y - contentInsets.top
+
+        // 钳制到有效范围
+        let clampedX = max(0, min(localX, availableWidth - 1))
+        let clampedY = max(0, min(localY, availableHeight - 1))
+
+        let col = Int(clampedX / strideX)
+        let row = Int(clampedY / strideY)
+
+        let clampedCol = max(0, min(col, columns - 1))
+        let clampedRow = max(0, min(row, rows - 1))
+
+        let localIndex = clampedRow * columns + clampedCol
+        let globalIndex = effectivePageIndex * itemsPerPage + localIndex
+
+        return globalIndex
+    }
+
+    func highlightDropTarget(at index: Int) {
+        // 清除之前的高亮
+        if let oldTarget = dropTargetIndex, oldTarget != index {
+            dropTargetIndex = nil
+            applyScaleForIndex(oldTarget, animated: true)
+        }
+
+        dropTargetIndex = index
+        if items.indices.contains(index), case .app = items[index] {
+            showFolderCreationHighlight(at: index)
+        } else {
+            hideFolderCreationHighlight()
+        }
+        applyScaleForIndex(index, animated: true)
+    }
+
+    func clearDropTargetHighlight(preservingCreation: Bool = false) {
+        hideFolderCreationHighlight(preservingForDrop: preservingCreation)
+        if let target = dropTargetIndex {
+            dropTargetIndex = nil
+            applyScaleForIndex(target, animated: true)
+        }
+    }
+
+    func setHighlight(at index: Int, highlighted _: Bool) {
+        applyScaleForIndex(index, animated: true)
+    }
+
+    func endDragging(at point: CGPoint) {
+        guard let dragIndex = draggingIndex, let dragItem = draggingItem else {
+            cancelDragging()
+            return
+        }
+        let revisionBeforeDrop = itemsRevision
+        let displayedDrop = dragDropPreview
+        dragDropPreview = .none
+        pendingDropPreview = nil
+        hoverUpdateTimer?.invalidate()
+        hoverUpdateTimer = nil
+
+        // Save current hover position before clearing
+        let savedHoverIndex = currentHoverIndex
+
+        // Keep a creation backplate until the model replaces it with the folder.
+        let isMerge: Bool = { if case .merge = displayedDrop { return true }; return false }()
+        clearDropTargetHighlight(preservingCreation: isMerge)
+        cancelEdgeDragTimer()
+
+        // Calculate target position
+        let targetPosition = gridPositionAt(point)
+
+        // Track if we're doing a reorder (so we don't reset positions unnecessarily)
+        var didReorder = false
+        var didMerge = false
+        var landingIndex: Int?
+        var landingPageOffset: CGFloat?
+
+        if isBatchDragging {
+            if let insertIndex = savedHoverIndex ?? targetPosition {
+                let clampedIndex = max(0, min(insertIndex, items.count))
+                let singleDragNoop = batchDraggingAppPathsOrdered.count == 1 && clampedIndex == dragIndex
+                if !singleDragNoop {
+                    onReorderAppBatch?(batchDraggingAppPathsOrdered, clampedIndex)
+                    didReorder = true
+                }
+            }
+        } else {
+            if case .insert(let target) = displayedDrop {
+                let occupied = items.map { item in
+                    if case .empty = item { return false }
+                    return true
+                }
+                if let plan = GridReorderPlan.make(occupied: occupied, from: dragIndex, to: target,
+                                                  itemsPerPage: itemsPerPage,
+                                                  cascading: dragIndex / itemsPerPage != target / itemsPerPage) {
+                    landingIndex = plan.destinationIndex
+                    let finalPage = min(currentPage, max(0, (plan.slots.count - 1) / itemsPerPage))
+                    landingPageOffset = -CGFloat(finalPage) * (bounds.width + pageSpacing)
+                }
+            }
+            if case .merge(let targetID) = displayedDrop {
+                didMerge = beginMergeLanding(itemID: dragItem.id, targetID: targetID)
+            }
+            switch commitDropPreview(displayedDrop, draggedItem: dragItem) {
+            case .merge:
+                if !didMerge { cancelDragging(); return }
+            case .insert(let insertIndex):
+                landingIndex = landingIndex ?? insertIndex
+                didReorder = true
+            case .none:
+                if didMerge { finishDragLanding(); didMerge = false }
+                break
+            }
+        }
+
+        // A single icon retains its lifted representation until it reaches the
+        // actual post-reorder cell, or shrinks into a merge target. Batch drops
+        // keep their existing semantics.
+        if !isBatchDragging {
+            if !didMerge {
+                beginDragLanding(itemID: dragItem.id,
+                                 waitingForRevision: didReorder ? revisionBeforeDrop : nil,
+                                 predictedIndex: landingIndex,
+                                 predictedPageOffset: landingPageOffset)
+            }
+            if !didReorder && !didMerge { resetIconPositions() }
+            isDraggingItem = false
+            draggingIndex = nil
+            draggingItem = nil
+            dropTargetIndex = nil
+            hoverUpdateTimer?.invalidate()
+            hoverUpdateTimer = nil
+            pendingHoverIndex = nil
+            currentHoverIndex = nil
+            originalIconPositions.removeAll()
+            hardSnapToCurrentPage()
+            updateDragLanding(at: CACurrentMediaTime())
+            return
+        }
+
+        // If we did a reorder, data will update and rebuild layers
+        // Delay clearing dragging state to avoid visual glitches during rebuild
+        if didReorder {
+            // Save drag index before clearing
+            let savedDragIndex = draggingIndex
+            
+            // Remove dragging layer immediately
+            removeDraggingVisuals()
+            
+            // Clear dragging flags immediately
+            isDraggingItem = false
+            dropTargetIndex = nil
+            
+            // Cancel pending updates
+            hoverUpdateTimer?.invalidate()
+            hoverUpdateTimer = nil
+            pendingHoverIndex = nil
+            currentHoverIndex = nil
+            
+            // Delay clearing other state to let data update complete
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.draggingIndex = nil
+                self.draggingItem = nil
+                self.originalIconPositions.removeAll()
+                
+                // Restore opacity of dragged item (if layers still exist)
+                if let dragIndex = savedDragIndex {
+                    let pageIndex = dragIndex / self.itemsPerPage
+                    let localIndex = dragIndex % self.itemsPerPage
+                    if pageIndex < self.iconLayers.count, localIndex < self.iconLayers[pageIndex].count {
+                        self.iconLayers[pageIndex][localIndex].opacity = 1.0
+                    }
+                }
+                self.restoreBatchHiddenCompanionLayers()
+                if self.isBatchSelectionMode {
+                    self.disableBatchSelectionMode()
+                }
+                self.forceSyncPageTransformIfNeeded()
+                self.animateFolderGlass()
+            }
+        } else {
+            // No reorder happened, reset positions to original
+            cancelDragging()
+        }
+        hardSnapToCurrentPage()
+        logIfMismatch("endDragging")
+    }
+
+    func removeDraggingVisuals() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if let draggingLayer {
+            folderGlassOverlay?.removeDraggingGlass(for: draggingLayer)
+            draggingLayer.removeFromSuperlayer()
+        }
+        draggingLayer = nil
+        CATransaction.commit()
+    }
+
+    func cancelDragging() {
+        dragDropPreview = .none
+        pendingDropPreview = nil
+        clearDropTargetHighlight()
+        finishDragLanding()
+        defer { syncFolderGlass() }
+        // Remove both drag representations before restoring the source icon.
+        removeDraggingVisuals()
+        // Reset icon positions to original
+        resetIconPositions()
+
+        isDraggingItem = false
+        draggingIndex = nil
+        draggingItem = nil
+        dropTargetIndex = nil
+        restoreBatchHiddenCompanionLayers()
+        hardSnapToCurrentPage()
+        logIfMismatch("cancelDragging")
+    }
+
+    func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        context == .outsideApplication ? .copy : []
+    }
+
+    func ignoreModifierKeys(for session: NSDraggingSession) -> Bool {
+        true
+    }
+
+    func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        externalAppDragSessionActive = false
+        AppDelegate.shared?.endExternalSystemDragSession()
+    }
+
+    func itemAt(_ point: CGPoint) -> (LaunchpadItem, Int)? {
+        let pageWidth = bounds.width
+        let pageHeight = bounds.height
+        let adjustedX = point.x - scrollOffset
+
+        // 计算点击的页面
+        let pageStride = pageWidth + pageSpacing
+        let pageIndex = Int(floor(adjustedX / pageStride))
+        guard pageIndex >= 0 && pageIndex < pageCount else { return nil }
+
+        let availableWidth = max(0, pageWidth - contentInsets.left - contentInsets.right)
+        let availableHeight = max(0, pageHeight - contentInsets.top - contentInsets.bottom)
+        let totalColumnSpacing = columnSpacing * CGFloat(max(columns - 1, 0))
+        let totalRowSpacing = rowSpacing * CGFloat(max(rows - 1, 0))
+        let usableWidth = max(0, availableWidth - totalColumnSpacing)
+        let usableHeight = max(0, availableHeight - totalRowSpacing)
+        let cellWidth = usableWidth / CGFloat(max(columns, 1))
+        let cellHeight = usableHeight / CGFloat(max(rows, 1))
+        let strideX = cellWidth + columnSpacing
+        let strideY = cellHeight + rowSpacing
+
+        // 计算点击位置相对于当前页的坐标
+        let pageX = adjustedX - CGFloat(pageIndex) * pageStride
+        guard pageX >= 0, pageX <= pageWidth else { return nil }
+        let localX = pageX - contentInsets.left
+        let localY = pageHeight - point.y - contentInsets.top
+
+        guard localX >= 0, localY >= 0 else { return nil }
+        guard localX < availableWidth, localY < availableHeight else { return nil }
+
+        let col = Int(localX / strideX)
+        let row = Int(localY / strideY)
+
+        guard col >= 0, col < columns, row >= 0, row < rows else { return nil }
+
+        let cellOriginX = CGFloat(col) * strideX
+        let cellOriginY = CGFloat(row) * strideY
+        let cellLocalX = localX - cellOriginX
+        let cellLocalY = localY - cellOriginY
+
+        guard cellLocalX >= 0, cellLocalX <= cellWidth else { return nil }
+        guard cellLocalY >= 0, cellLocalY <= cellHeight else { return nil }
+
+        let localIndex = row * columns + col
+        let globalIndex = pageIndex * itemsPerPage + localIndex
+
+        guard globalIndex < items.count else { return nil }
+
+        // 检查是否点击在图标+标签区域内（不是单元格的空白部分）
+        let actualIconSize = iconSize
+        let labelHeight: CGFloat = showLabels ? (labelFontSize + 8) : 0
+        let labelTopSpacing: CGFloat = showLabels ? 6 : 0
+        let totalItemHeight = actualIconSize + labelTopSpacing + labelHeight
+
+        // 图标+标签区域居中于单元格
+        let itemStartX = (cellWidth - actualIconSize) / 2
+        let itemEndX = itemStartX + actualIconSize
+        let itemStartY = (cellHeight - totalItemHeight) / 2
+        let itemEndY = itemStartY + totalItemHeight
+
+        // 检查是否在图标+标签区域内
+        guard cellLocalX >= itemStartX && cellLocalX <= itemEndX else { return nil }
+        guard cellLocalY >= itemStartY && cellLocalY <= itemEndY else { return nil }
+
+        return (items[globalIndex], globalIndex)
+    }
+
+}

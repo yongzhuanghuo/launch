@@ -1,0 +1,492 @@
+import Foundation
+import ImageIO
+import UniformTypeIdentifiers
+import XCTest
+import LaunchNextWallpaperCore
+
+final class WallpaperIdentityTests: XCTestCase {
+    func testWorkspacePlaceholderAllowsCaptureKeyWithoutVerifyingStaticFile() throws {
+        let url = try temporaryImage()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store: [String: Any] = ["Displays": [displayA: entry(
+            provider: imageProvider, configuration: imageConfiguration(url))]]
+        let reported = URL(fileURLWithPath: "/System/Library/CoreServices/DefaultDesktop.heic")
+        let identity = try XCTUnwrap(WallpaperIdentityResolver.captureFallbackIdentity(
+            displayUUID: displayA, store: store, currentDesktopImageURL: reported))
+        XCTAssertEqual(identity.source, .image(url))
+        XCTAssertTrue(WallpaperFrameStability.supportsReuse(for: identity))
+        XCTAssertEqual(WallpaperIdentityResolver.resolve(displayUUID: displayA, store: store,
+            currentDesktopImageURL: reported, allowUnverifiedDesktopImageURL: false), .ambiguous)
+        // Identity/context changes must still invalidate the observed frame.
+        let otherURL = try temporaryImage()
+        defer { try? FileManager.default.removeItem(at: otherURL) }
+        let changed: [String: Any] = ["Displays": [displayA: entry(
+            provider: imageProvider, configuration: imageConfiguration(otherURL))]]
+        XCTAssertNotEqual(identity, WallpaperIdentityResolver.captureFallbackIdentity(
+            displayUUID: displayA, store: changed, currentDesktopImageURL: reported))
+    }
+
+    func testCaptureKeyDoesNotGuessForOtherConflictsOrMissingDisplay() throws {
+        let url = try temporaryImage()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let configured = entry(provider: imageProvider, configuration: imageConfiguration(url))
+        let store: [String: Any] = ["Displays": [displayA: configured], "SystemDefault": configured]
+        for reported in [nil, URL(fileURLWithPath: "/Pictures/Other.jpg"),
+                         URL(fileURLWithPath: "/Pictures/DefaultDesktop.heic"), url] {
+            XCTAssertNil(WallpaperIdentityResolver.captureFallbackIdentity(
+                displayUUID: displayA, store: store, currentDesktopImageURL: reported))
+        }
+        XCTAssertNil(WallpaperIdentityResolver.captureFallbackIdentity(displayUUID: displayB, store: store,
+            currentDesktopImageURL: URL(fileURLWithPath: "/System/Library/CoreServices/DefaultDesktop.heic")))
+    }
+
+    func testCaptureKeyRejectsMultipleChoicesAndMultiFrameOrUnreadableImages() throws {
+        let multiFrame = try temporaryImage(frameCount: 2)
+        defer { try? FileManager.default.removeItem(at: multiFrame) }
+        let reported = URL(fileURLWithPath: "/System/Library/CoreServices/DefaultDesktop.heic")
+        for url in [multiFrame, URL(fileURLWithPath: "/unavailable/Selected.png")] {
+            let store: [String: Any] = ["Displays": [displayA: entry(
+                provider: imageProvider, configuration: imageConfiguration(url))]]
+            XCTAssertNil(WallpaperIdentityResolver.captureFallbackIdentity(
+                displayUUID: displayA, store: store, currentDesktopImageURL: reported))
+        }
+        let store: [String: Any] = ["Displays": [displayA: entry(choices: [
+            choice(provider: imageProvider, configuration: imageConfiguration(multiFrame)),
+            choice(provider: aerialProvider, configuration: ["assetID": "ANOTHER"])
+        ])]]
+        XCTAssertNil(WallpaperIdentityResolver.captureFallbackIdentity(
+            displayUUID: displayA, store: store, currentDesktopImageURL: reported))
+    }
+
+    private func temporaryImage(frameCount: Int = 1) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".gif")
+        let context = try XCTUnwrap(CGContext(data: nil, width: 8, height: 8, bitsPerComponent: 8,
+            bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        let image = try XCTUnwrap(context.makeImage())
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithURL(url as CFURL,
+            UTType.gif.identifier as CFString, frameCount, nil))
+        for _ in 0..<frameCount { CGImageDestinationAddImage(destination, image, nil) }
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        return url
+    }
+
+    func testPreviewUsesConfiguredImageDespiteWorkspaceDefaultWithoutWeakeningExactIdentity() throws {
+        let configured = URL(fileURLWithPath: "/Pictures/Selected.jpg")
+        let reported = URL(fileURLWithPath: "/System/Library/CoreServices/DefaultDesktop.heic")
+        let store: [String: Any] = ["Displays": [displayA: entry(
+            provider: imageProvider, configuration: imageConfiguration(configured))]]
+        XCTAssertEqual(WallpaperIdentityResolver.resolvePreview(
+            displayUUID: displayA, store: store, currentDesktopImageURL: reported)?.source, .image(configured))
+        XCTAssertEqual(WallpaperIdentityResolver.resolve(
+            displayUUID: displayA, store: store, currentDesktopImageURL: reported,
+            allowUnverifiedDesktopImageURL: false), .ambiguous)
+    }
+
+    func testPreviewDoesNotGuessBetweenMultipleChoices() {
+        let store: [String: Any] = ["SystemDefault": entry(choices: [
+            choice(provider: aerialProvider, configuration: ["assetID": "ONE"]),
+            choice(provider: aerialProvider, configuration: ["assetID": "TWO"])
+        ])]
+        XCTAssertNil(WallpaperIdentityResolver.resolvePreview(displayUUID: displayA, store: store,
+            currentDesktopImageURL: URL(fileURLWithPath: "/System/Library/CoreServices/DefaultDesktop.heic")))
+    }
+
+    func testPreviewRetainsWorkspaceFallbackWhenStoreIsUnavailable() {
+        let url = URL(fileURLWithPath: "/Pictures/Selected.jpg")
+        XCTAssertEqual(WallpaperIdentityResolver.resolvePreview(
+            displayUUID: displayA, store: [:], currentDesktopImageURL: url)?.source, .image(url))
+    }
+
+    func testDynamicDescriptorRetainsAnimatedIdentityAndLocalPreviewSource() throws {
+        let url = URL(fileURLWithPath: "/System/Library/Desktop Pictures/Chroma Red.madesktop")
+        let store: [String: Any] = ["Displays": [displayA: entry(
+            provider: "com.apple.wallpaper.choice.dynamic", configuration: imageConfiguration(url))]]
+        let identity = try exactIdentity(WallpaperIdentityResolver.resolve(
+            displayUUID: displayA, store: store,
+            currentDesktopImageURL: URL(fileURLWithPath: "/System/Library/Desktop Pictures/DefaultDesktop.heic"),
+            allowUnverifiedDesktopImageURL: false))
+        XCTAssertEqual(identity.kind, .animated)
+        XCTAssertEqual(identity.source, .image(url))
+    }
+
+    func testDynamicPreviewRejectsRemoteSource() throws {
+        let store: [String: Any] = ["Displays": [displayA: entry(
+            provider: "com.apple.wallpaper.choice.dynamic",
+            configuration: ["url": ["relative": "https://example.com/wallpaper.heic"]])]]
+        let identity = try exactIdentity(WallpaperIdentityResolver.resolve(displayUUID: displayA, store: store))
+        XCTAssertEqual(identity.source, .unavailable)
+    }
+
+    private let displayA = "DISPLAY-A"
+    private let displayB = "DISPLAY-B"
+
+    func testDisplaySpecificDesktopChoiceDoesNotCrossDisplays() throws {
+        let firstURL = URL(fileURLWithPath: "/Pictures/First.jpg")
+        let secondURL = URL(fileURLWithPath: "/Pictures/Second.jpg")
+        let store: [String: Any] = [
+            "Displays": [
+                displayA: entry(provider: imageProvider, configuration: imageConfiguration(firstURL)),
+                displayB: entry(provider: imageProvider, configuration: imageConfiguration(secondURL))
+            ]
+        ]
+
+        let first = try exactIdentity(WallpaperIdentityResolver.resolve(displayUUID: displayA, store: store))
+        let second = try exactIdentity(WallpaperIdentityResolver.resolve(displayUUID: displayB, store: store))
+
+        XCTAssertNotEqual(first.configurationDigest, second.configurationDigest)
+        XCTAssertEqual(first.source, .image(firstURL.standardizedFileURL))
+        XCTAssertEqual(second.source, .image(secondURL.standardizedFileURL))
+    }
+
+    func testRootDesktopWinsOverSpacesAndIdleIsIgnored() throws {
+        let rootURL = URL(fileURLWithPath: "/Pictures/Current.jpg")
+        let store: [String: Any] = [
+            "Displays": [
+                displayA: entry(
+                    provider: imageProvider,
+                    configuration: imageConfiguration(rootURL),
+                    idleProvider: "com.apple.NeptuneOneExtension"
+                )
+            ],
+            "Spaces": [
+                "current": [
+                    "Default": entry(
+                        provider: aerialProvider,
+                        configuration: ["assetID": "AERIAL-1"]
+                    )
+                ]
+            ]
+        ]
+
+        let identity = try exactIdentity(
+            WallpaperIdentityResolver.resolve(displayUUID: displayA, store: store)
+        )
+
+        XCTAssertEqual(identity.provider, imageProvider)
+        XCTAssertEqual(identity.kind, .staticImage)
+        XCTAssertEqual(identity.source, .image(rootURL.standardizedFileURL))
+    }
+
+    func testHistoricalSpacesAreIgnoredInFavorOfRootEntry() throws {
+        // macOS never prunes the Spaces dictionary. A real machine accumulates
+        // hundreds of stale entries that disagree with each other and with the
+        // wallpaper actually in use, and no public API identifies the current
+        // Space - so only the root Displays entry is authoritative.
+        let currentAssetID = "CURRENT-AERIAL"
+        var spaces: [String: Any] = [:]
+        for index in 0..<700 {
+            spaces["space-\(index)"] = [
+                "Default": entry(
+                    provider: aerialProvider,
+                    configuration: ["assetID": "STALE-\(index % 12)"]
+                )
+            ]
+        }
+        let store: [String: Any] = [
+            "Displays": [
+                displayA: entry(
+                    provider: aerialProvider,
+                    configuration: ["assetID": currentAssetID]
+                )
+            ],
+            "Spaces": spaces
+        ]
+
+        let identity = try exactIdentity(
+            WallpaperIdentityResolver.resolve(displayUUID: displayA, store: store)
+        )
+
+        XCTAssertEqual(identity.source, .aerial(assetID: currentAssetID))
+    }
+
+    func testSpacesOnlyStoreResolvesToUnavailable() {
+        let store: [String: Any] = [
+            "Spaces": [
+                "one": [
+                    "Default": entry(provider: aerialProvider, configuration: ["assetID": "ONE"])
+                ],
+                "two": [
+                    "Default": entry(provider: aerialProvider, configuration: ["assetID": "TWO"])
+                ]
+            ]
+        ]
+
+        // currentDesktopImageURL must be nil: a non-nil value would hit the
+        // "no candidates -> fall back to the current desktop image" branch and
+        // return .exact, which would defeat the point of this test.
+        XCTAssertEqual(
+            WallpaperIdentityResolver.resolve(
+                displayUUID: displayA,
+                store: store,
+                currentDesktopImageURL: nil
+            ),
+            .unavailable
+        )
+    }
+
+    func testIdleOnlyEntryIsUnavailable() {
+        let store: [String: Any] = [
+            "SystemDefault": [
+                "Idle": [
+                    "Content": [
+                        "Choices": [choice(
+                            provider: "com.apple.NeptuneOneExtension",
+                            configuration: [:]
+                        )]
+                    ]
+                ]
+            ]
+        ]
+
+        XCTAssertEqual(
+            WallpaperIdentityResolver.resolve(displayUUID: displayA, store: store),
+            .unavailable
+        )
+    }
+
+    func testMultipleDifferentChoicesAreAmbiguous() {
+        let store: [String: Any] = [
+            "SystemDefault": entry(choices: [
+                choice(provider: aerialProvider, configuration: ["assetID": "ONE"]),
+                choice(provider: aerialProvider, configuration: ["assetID": "TWO"])
+            ])
+        ]
+
+        XCTAssertEqual(
+            WallpaperIdentityResolver.resolve(displayUUID: displayA, store: store),
+            .ambiguous
+        )
+    }
+
+    func testEncodedOptionsParticipateInIdentity() throws {
+        let configuration = imageConfiguration(URL(fileURLWithPath: "/Pictures/Shared.jpg"))
+        let firstStore: [String: Any] = [
+            "SystemDefault": entry(
+                provider: imageProvider,
+                configuration: configuration,
+                encodedOptions: plistData(["placement": "fill"])
+            )
+        ]
+        let secondStore: [String: Any] = [
+            "SystemDefault": entry(
+                provider: imageProvider,
+                configuration: configuration,
+                encodedOptions: plistData(["placement": "fit"])
+            )
+        ]
+
+        let first = try exactIdentity(
+            WallpaperIdentityResolver.resolve(displayUUID: displayA, store: firstStore)
+        )
+        let second = try exactIdentity(
+            WallpaperIdentityResolver.resolve(displayUUID: displayA, store: secondStore)
+        )
+
+        XCTAssertNotEqual(first.configurationDigest, second.configurationDigest)
+    }
+
+    func testDesktopImageURLIsExactWhenStoreIsUnavailable() throws {
+        let url = URL(fileURLWithPath: "/Pictures/Current.jpg")
+        let identity = try exactIdentity(
+            WallpaperIdentityResolver.resolve(
+                displayUUID: displayA,
+                store: [:],
+                currentDesktopImageURL: url
+            )
+        )
+
+        XCTAssertEqual(identity.kind, .staticImage)
+        XCTAssertEqual(identity.source, .image(url.standardizedFileURL))
+    }
+
+    func testDesktopImageURLOverridesAStaleStaticStoreEntry() throws {
+        let staleURL = URL(fileURLWithPath: "/Pictures/Stale.jpg")
+        let currentURL = URL(fileURLWithPath: "/Pictures/Current.jpg")
+        let store: [String: Any] = [
+            "SystemDefault": entry(
+                provider: imageProvider,
+                configuration: imageConfiguration(staleURL)
+            )
+        ]
+
+        let identity = try exactIdentity(
+            WallpaperIdentityResolver.resolve(
+                displayUUID: displayA,
+                store: store,
+                currentDesktopImageURL: currentURL
+            )
+        )
+
+        XCTAssertEqual(identity.source, .image(currentURL.standardizedFileURL))
+    }
+
+    func testRefreshPolicyReusesOnlyMatchingStaticContent() {
+        XCTAssertEqual(
+            WallpaperRefreshPolicy.windowShown(kind: .staticImage, hasMatchingContent: true),
+            .reuse
+        )
+        XCTAssertEqual(
+            WallpaperRefreshPolicy.windowShown(kind: .staticImage, hasMatchingContent: false),
+            .capture
+        )
+        XCTAssertEqual(
+            WallpaperRefreshPolicy.windowShown(kind: .animated, hasMatchingContent: true),
+            .capture
+        )
+        XCTAssertEqual(
+            WallpaperRefreshPolicy.windowShown(kind: nil, hasMatchingContent: true),
+            .capture
+        )
+    }
+
+    func testStrictResolutionDoesNotTrustDefaultImageWithoutConfiguration() {
+        XCTAssertEqual(WallpaperIdentityResolver.resolve(
+            displayUUID: displayA, store: [:],
+            currentDesktopImageURL: URL(fileURLWithPath: "/System/Library/Desktop Pictures/DefaultDesktop.heic"),
+            allowUnverifiedDesktopImageURL: false
+        ), .unavailable)
+    }
+
+    func testStrictResolutionRejectsConflictingStaticSource() {
+        let store: [String: Any] = ["Displays": [displayA: entry(
+            provider: imageProvider, configuration: imageConfiguration(URL(fileURLWithPath: "/Pictures/Actual.jpg"))
+        )]]
+        XCTAssertEqual(WallpaperIdentityResolver.resolve(
+            displayUUID: displayA, store: store,
+            currentDesktopImageURL: URL(fileURLWithPath: "/Pictures/Unrelated.heic"),
+            allowUnverifiedDesktopImageURL: false
+        ), .ambiguous)
+    }
+
+    func testStrictResolutionAcceptsMatchingStaticSource() throws {
+        let url = URL(fileURLWithPath: "/Pictures/Actual.jpg")
+        let store: [String: Any] = ["Displays": [displayA: entry(
+            provider: imageProvider, configuration: imageConfiguration(url)
+        )]]
+        let identity = try exactIdentity(WallpaperIdentityResolver.resolve(
+            displayUUID: displayA, store: store, currentDesktopImageURL: url,
+            allowUnverifiedDesktopImageURL: false
+        ))
+        XCTAssertEqual(identity.source, .image(url))
+        XCTAssertEqual(identity.kind, .staticImage)
+    }
+
+    func testStrictResolutionKeepsVideoIdentityDespiteWorkspaceDefaultImage() throws {
+        let store: [String: Any] = ["Displays": [displayA: entry(
+            provider: aerialProvider, configuration: ["assetID": "CURRENT-VIDEO"]
+        )]]
+        let identity = try exactIdentity(WallpaperIdentityResolver.resolve(
+            displayUUID: displayA, store: store,
+            currentDesktopImageURL: URL(fileURLWithPath: "/Pictures/DefaultDesktop.heic"),
+            allowUnverifiedDesktopImageURL: false
+        ))
+        XCTAssertEqual(identity.kind, .animated)
+        XCTAssertEqual(identity.source, .aerial(assetID: "CURRENT-VIDEO"))
+    }
+
+    func testSnapshotLifecycleRejectsQueuedWriteAfterDisable() {
+        let lifecycle = WallpaperSnapshotLifecycle()
+        let queuedWrite = lifecycle.currentToken()
+        let removal = lifecycle.transition(to: false)
+
+        XCTAssertFalse(lifecycle.permitsPersistence(using: queuedWrite))
+        XCTAssertTrue(lifecycle.permitsRemoval(using: removal))
+    }
+
+    func testSnapshotLifecycleReenableSupersedesPendingRemoval() {
+        let lifecycle = WallpaperSnapshotLifecycle()
+        let originalWrite = lifecycle.currentToken()
+        let pendingRemoval = lifecycle.transition(to: false)
+        let newWrite = lifecycle.transition(to: true)
+
+        XCTAssertFalse(lifecycle.permitsPersistence(using: originalWrite))
+        XCTAssertFalse(lifecycle.permitsRemoval(using: pendingRemoval))
+        XCTAssertTrue(lifecycle.permitsPersistence(using: newWrite))
+    }
+
+    func testSnapshotLifecycleRepeatedStateDoesNotInvalidateCurrentWork() {
+        let lifecycle = WallpaperSnapshotLifecycle(persistenceEnabled: false)
+        let firstRemoval = lifecycle.currentToken()
+        let repeatedRemoval = lifecycle.transition(to: false)
+
+        XCTAssertEqual(firstRemoval, repeatedRemoval)
+        XCTAssertTrue(lifecycle.permitsRemoval(using: repeatedRemoval))
+    }
+
+    private var imageProvider: String { "com.apple.wallpaper.choice.image" }
+    private var aerialProvider: String { "com.apple.wallpaper.choice.aerials" }
+
+    private func entry(
+        provider: String,
+        configuration: [String: Any],
+        encodedOptions: Data = Data(),
+        idleProvider: String? = nil
+    ) -> [String: Any] {
+        var result = entry(
+            choices: [choice(provider: provider, configuration: configuration)],
+            encodedOptions: encodedOptions
+        )
+        if let idleProvider {
+            result["Idle"] = [
+                "Content": [
+                    "Choices": [choice(provider: idleProvider, configuration: [:])]
+                ]
+            ]
+        }
+        return result
+    }
+
+    private func entry(
+        choices: [[String: Any]],
+        encodedOptions: Data = Data()
+    ) -> [String: Any] {
+        [
+            "Desktop": [
+                "Content": [
+                    "Choices": choices,
+                    "EncodedOptionValues": encodedOptions
+                ]
+            ]
+        ]
+    }
+
+    private func choice(
+        provider: String,
+        configuration: [String: Any]
+    ) -> [String: Any] {
+        [
+            "Provider": provider,
+            "Configuration": plistData(configuration),
+            "Files": []
+        ]
+    }
+
+    private func imageConfiguration(_ url: URL) -> [String: Any] {
+        ["url": ["relative": url.absoluteString]]
+    }
+
+    private func plistData(_ value: Any) -> Data {
+        try! PropertyListSerialization.data(
+            fromPropertyList: value,
+            format: .binary,
+            options: 0
+        )
+    }
+
+    private func exactIdentity(
+        _ resolution: WallpaperIdentityResolution,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> WallpaperIdentity {
+        guard case let .exact(identity) = resolution else {
+            XCTFail("Expected an exact wallpaper identity, got \(resolution)", file: file, line: line)
+            throw TestFailure.notExact
+        }
+        return identity
+    }
+
+    private enum TestFailure: Error {
+        case notExact
+    }
+}
