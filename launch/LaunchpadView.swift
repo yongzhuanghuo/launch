@@ -314,7 +314,7 @@ struct LaunchpadView: View {
     }
     
     var body: some View {
-        launchpadEventBoundView
+        launchpadLifecycleBoundView
          .task(id: appStore.layoutRevealRequest?.id) {
              guard let request = appStore.layoutRevealRequest else { return }
              // Search observers must see the pending request before navigation
@@ -404,6 +404,10 @@ struct LaunchpadView: View {
              // the display/context instead of discarding a settled frame.
              refreshBackgroundImage(reason: .contextChecked)
          }
+    }
+
+    private var launchpadBackgroundBoundView: some View {
+        launchpadEventBoundView
          .onChange(of: appStore.backgroundImageEnabled) { _, _ in
              refreshBackgroundImage(reason: .settingsChanged)
          }
@@ -502,6 +506,10 @@ struct LaunchpadView: View {
             stopFPSMonitoring()
             backgroundImageController.clear()
          }
+    }
+
+    private var launchpadLifecycleBoundView: some View {
+        launchpadBackgroundBoundView
         .onChange(of: appStore.shouldShowOnboarding) { wasVisible, visible in
             if wasVisible && !visible {
                 if appStore.isInitialLoading {
