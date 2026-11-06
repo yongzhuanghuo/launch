@@ -1,15 +1,15 @@
-# LaunchNext
+# launch
 
 **Języki**: [English](../README.md) | [简体中文](README.zh.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Français](README.fr.md) | [Español](README.es.md) | [Deutsch](README.de.md) | [Русский](README.ru.md) | [हिन्दी](README.hi.md) | [Tiếng Việt](README.vi.md) | [Italiano](README.it.md) | [Čeština](README.cs.md) | [Polski](README.pl.md)
 
 ## 📥 Pobieranie
 
-**[Pobierz tutaj](https://github.com/RoversX/LaunchNext/releases/latest)** - pobierz najnowsze wersję
+**[Pobierz tutaj](https://github.com/yongzhuanghuo/launch/releases/latest)** - pobierz najnowsze wersję
 
-🌐 **Strona**: [closex.org/launchnext](https://closex.org/launchnext/)  
-📚 **Dokumentacja**: [docs.closex.org/launchnext](https://docs.closex.org/launchnext/)
+🌐 **Strona**: [closex.org/launch](https://closex.org/launch/)  
+📚 **Dokumentacja**: [docs.closex.org/launch](https://docs.closex.org/launch/)
 
-⭐ Rozważ dodanie gwiazdki [LaunchNext](https://github.com/RoversX/LaunchNext), a zwłaszcza [LaunchNow](https://github.com/ggkevinnnn/LaunchNow)!
+⭐ Rozważ dodanie gwiazdki [launch](https://github.com/yongzhuanghuo/launch), a zwłaszcza [LaunchNow](https://github.com/ggkevinnnn/LaunchNow)!
 
 🖥️ Wypróbuj też mój nowy, otwartoźródłowy multiplekser terminala dla agentów [ThinkTerm](https://github.com/RoversX/ThinkTerm) – pracowałem nad nim ponad pół roku 🥺
 
@@ -18,33 +18,33 @@
 | ![](../public/banner.webp) | ![](../public/setting1.webp) |
 | ![](../public/setting2.webp) | ![](../public/setting3.webp) |
 
-macOS Tahoe usunął Launchpada, a nowy zamiennik jest bardzo niewygodny i nie wykorzystuje Twojego GPU. Apple, proszę, dajcie ludziom przynajmniej opcję powrotu do starego. Zanim to nastąpi, oto LaunchNext
+macOS Tahoe usunął Launchpada, a nowy zamiennik jest bardzo niewygodny i nie wykorzystuje Twojego GPU. Apple, proszę, dajcie ludziom przynajmniej opcję powrotu do starego. Zanim to nastąpi, oto launch
 
 *Zbudowany na bazie [LaunchNow](https://github.com/ggkevinnnn/LaunchNow) autorstwa ggkevinnnn - ogromne podziękowania dla oryginalnego projektu!❤️*
 
-*LaunchNow wybrał licencję GPL 3. LaunchNext podlega tym samym warunkom licencyjnym.*
+*LaunchNow wybrał licencję GPL 3. launch podlega tym samym warunkom licencyjnym.*
 
 ### Instalacja przez Homebrew 🍺
 
 ```bash
-brew install --cask RoversX/homebrew-tap/launchnext
+brew install --cask RoversX/homebrew-tap/launch
 ```
 
-LaunchNext ma własny aktualizator. Cask Homebrew służy głównie do instalacji i ręcznych aktualizacji.
+launch ma własny aktualizator. Cask Homebrew służy głównie do instalacji i ręcznych aktualizacji.
 
 ⚠️ **Jeśli macOS zablokuje aplikację, uruchom to polecenie w Terminalu:**
 ```bash
-sudo xattr -r -d com.apple.quarantine /Applications/LaunchNext.app
+sudo xattr -r -d com.apple.quarantine /Applications/launch.app
 ```
 **Dlaczego**: ~~Nie stać mnie na certyfikat deweloperski Apple (99 USD rocznie), więc macOS blokuje niepodpisane aplikacje.~~ To polecenie usuwa znacznik kwarantanny, aby aplikacja mogła się uruchomić. **Używaj tego polecenia tylko z aplikacjami, którym ufasz.**
 
 ### Stan podpisywania kodu
 
-Po ogromnym wysiłku, począwszy od LaunchNext 2.4.2, wydania są podpisywane i notaryzowane przez Apple. Na razie to testuję — członkostwo trwa tylko rok, a utrzymanie go nie jest tanie, więc mogę go nie odnowić. W takim przypadku kolejne wydania wrócą do kompilacji niepodpisanych lub podpisanych ad hoc, co niekoniecznie byłoby złym pomysłem.
+Po ogromnym wysiłku, począwszy od launch 2.4.2, wydania są podpisywane i notaryzowane przez Apple. Na razie to testuję — członkostwo trwa tylko rok, a utrzymanie go nie jest tanie, więc mogę go nie odnowić. W takim przypadku kolejne wydania wrócą do kompilacji niepodpisanych lub podpisanych ad hoc, co niekoniecznie byłoby złym pomysłem.
 
 Budujesz ze źródeł? Zobacz [Konfiguracja lokalnego podpisywania kodu](#configure-local-code-signing).
 
-### Co oferuje LaunchNext
+### Co oferuje launch
 - ✅ **Import jednym kliknięciem ze starego systemowego Launchpada** - bezpośrednio odczytuje natywną bazę SQLite Launchpada (`/private$(getconf DARWIN_USER_DIR)com.apple.dock.launchpad/db/db`), aby wiernie odtworzyć istniejące foldery, pozycje aplikacji i układ
 - ✅ **Klasyczne wrażenia z Launchpada** - działa dokładnie jak ukochany oryginalny interfejs
 - ✅ **Obsługa wielu języków** - pełna internacjonalizacja, m.in. angielski, chiński uproszczony, chiński tradycyjny, japoński, francuski, hiszpański, niemiecki, rosyjski, polski i inne
@@ -53,7 +53,7 @@ Budujesz ze źródeł? Zobacz [Konfiguracja lokalnego podpisywania kodu](#config
 - ✅ **Inteligentne zarządzanie folderami** - twórz i porządkuj foldery tak jak wcześniej
 - ✅ **Wyszukiwanie rozmyte i nawigacja klawiaturą** - szybko znajdziesz aplikacje, nawet przy niepełnym lub niedokładnym wpisie
 - ✅ **Obsługa CLI / TUI** - przeglądaj i obsługuj układ z poziomu terminala
-- ✅ **Aktywny narożnik i natywne gesty** - otwieraj LaunchNext narożnikami, gestami gładzika oraz gestami 4 / 5 palców
+- ✅ **Aktywny narożnik i natywne gesty** - otwieraj launch narożnikami, gestami gładzika oraz gestami 4 / 5 palców
 - ✅ **Przeciąganie aplikacji bezpośrednio do Docka** - dostępne w Next Engine + Core Animation
 - ✅ **Foldery Core Animation** - zawartość folderów obsługuje układ stronicowany i przewijany pionowo
 - ✅ **Lepsze menu kontekstowe** - Pokaż w Finderze, Kopiuj ścieżkę aplikacji, Zmień nazwę folderu i skonfigurowane akcje deinstalacji
@@ -71,7 +71,7 @@ Budujesz ze źródeł? Zobacz [Konfiguracja lokalnego podpisywania kodu](#config
 ### Przechowywanie danych
 Dane aplikacji są bezpiecznie zapisywane w:
 ```
-~/Library/Application Support/LaunchNext/Data.store
+~/Library/Application Support/launch/Data.store
 ```
 
 ### Natywna integracja z Launchpadem
@@ -91,24 +91,24 @@ Odczytuje dane bezpośrednio z systemowej bazy Launchpada:
 
 1. **Sklonuj repozytorium**
    ```bash
-   git clone https://github.com/RoversX/LaunchNext.git
-   cd LaunchNext
+   git clone https://github.com/yongzhuanghuo/launch.git
+   cd launch
    ```
 
 2. **Otwórz w Xcode**
    ```bash
-   open LaunchNext.xcodeproj
+   open launch.xcodeproj
    ```
 
 3. <a name="configure-local-code-signing"></a>**Skonfiguruj lokalne podpisywanie kodu**
-   - Do budowania i współtworzenia LaunchNext nie jest wymagane płatne członkostwo w Apple Developer.
-   - Wybierz **target LaunchNext**, otwórz **Signing & Capabilities**, ustaw **Team** na `None` i wybierz `Sign to Run Locally` jako certyfikat podpisywania.
+   - Do budowania i współtworzenia launch nie jest wymagane płatne członkostwo w Apple Developer.
+   - Wybierz **target launch**, otwórz **Signing & Capabilities**, ustaw **Team** na `None` i wybierz `Sign to Run Locally` jako certyfikat podpisywania.
    - Pozostaw włączony Hardened Runtime.
    - Xcode może oznaczyć plik projektu jako zmodyfikowany po zmianie tych lokalnych ustawień. Nie dołączaj do pull requesta zmian dotyczących wyłącznie podpisywania.
 
-   | **Lokalne ustawienia podpisywania w Xcode dla LaunchNext** | **Podpisane i notaryzowane wydanie LaunchNext** |
+   | **Lokalne ustawienia podpisywania w Xcode dla launch** | **Podpisane i notaryzowane wydanie launch** |
    | :---: | :---: |
-   | <img src="../public/local-code-signing.png" alt="Lokalne ustawienia podpisywania w Xcode dla LaunchNext" width="620"> | <img src="../public/notarized-release-status.png" alt="Stan podpisanego i notaryzowanego wydania LaunchNext" width="300"> |
+   | <img src="../public/local-code-signing.png" alt="Lokalne ustawienia podpisywania w Xcode dla launch" width="620"> | <img src="../public/notarized-release-status.png" alt="Stan podpisanego i notaryzowanego wydania launch" width="300"> |
 
 4. **Zbuduj i uruchom**
    - Aby uruchomić aplikację przez `⌘+R`, wybierz `My Mac` jako cel uruchomienia, a nie `Any Mac`.
@@ -119,18 +119,18 @@ Odczytuje dane bezpośrednio z systemowej bazy Launchpada:
 
 **Zwykła kompilacja:**
 ```bash
-xcodebuild -project LaunchNext.xcodeproj -scheme LaunchNext -configuration Release
+xcodebuild -project launch.xcodeproj -scheme launch -configuration Release
 ```
 
 **Kompilacja uniwersalna (Intel + Apple Silicon):**
 ```bash
-xcodebuild -project LaunchNext.xcodeproj -scheme LaunchNext -configuration Release ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO clean build
+xcodebuild -project launch.xcodeproj -scheme launch -configuration Release ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO clean build
 ```
 
 ## Użycie
 
 ### Pierwsze kroki
-1. **Pierwsze uruchomienie**: LaunchNext automatycznie skanuje wszystkie zainstalowane aplikacje
+1. **Pierwsze uruchomienie**: launch automatycznie skanuje wszystkie zainstalowane aplikacje
 2. **Wybieranie**: kliknij, aby zaznaczyć aplikację, kliknij dwukrotnie, aby ją uruchomić
 3. **Wyszukiwanie**: zacznij pisać, aby natychmiast filtrować aplikacje
 4. **Porządkowanie**: przeciągaj aplikacje, aby tworzyć foldery i własne układy
@@ -146,7 +146,7 @@ xcodebuild -project LaunchNext.xcodeproj -scheme LaunchNext -configuration Relea
 - **Kompaktowy**: pływające okno z zaokrąglonymi rogami
 - **Pełny ekran**: tryb pełnoekranowy dla maksymalnej widoczności
 - **Legacy Engine** oraz **Next Engine + Core Animation** są dostępne w Ustawieniach
-- LaunchNext może przechowywać osobne ustawienia dla pełnego ekranu i trybu kompaktowego
+- launch może przechowywać osobne ustawienia dla pełnego ekranu i trybu kompaktowego
 - Dostępne jest opcjonalne ukrywanie paska menu na pełnym ekranie; macOS ukrywa wtedy również Dock
 
 ## Funkcje zaawansowane
@@ -168,8 +168,8 @@ xcodebuild -project LaunchNext.xcodeproj -scheme LaunchNext -configuration Relea
 - **Skanowanie w tle**: wykrywanie aplikacji bez blokowania interfejsu
 
 ### Automatyzacja i aktywacja
-- **CLI / TUI**: zarządzaj LaunchNext z poziomu terminala
-- **Aktywny narożnik**: otwieraj LaunchNext z konfigurowalnego narożnika ekranu
+- **CLI / TUI**: zarządzaj launch z poziomu terminala
+- **Aktywny narożnik**: otwieraj launch z konfigurowalnego narożnika ekranu
 - **Eksperymentalne gesty natywne**: gesty ściągnięcia palców i stuknięcia 4 / 5 palcami, w tym wybór zewnętrznego gładzika
 - **Przeciąganie do Docka**: przeciągaj aplikacje bezpośrednio do Docka macOS w Next Engine + Core Animation
 
@@ -197,7 +197,7 @@ O: Upewnij się, że masz macOS 26.0+ i sprawdź uprawnienia systemowe.
 O: Dla najlepszych wrażeń zalecany jest `Next Engine + Core Animation`. `Legacy Engine` jest nadal dostępny, jeśli potrzebujesz starszej ścieżki zgodności.
 
 **P: Dlaczego polecenie CLI jeszcze nie istnieje?**
-O: Najpierw włącz interfejs wiersza poleceń w Ustawieniach. LaunchNext może za Ciebie zainstalować i usunąć zarządzane polecenie `launchnext`.
+O: Najpierw włącz interfejs wiersza poleceń w Ustawieniach. launch może za Ciebie zainstalować i usunąć zarządzane polecenie `launch`.
 
 ## Współtworzenie
 
@@ -223,22 +223,22 @@ Zapraszamy do współpracy! Prosimy o:
 - [Diagnostyka siatki](../scripts/diagnostics/README.md) — ręczne sondy dla siatki
   i nakładki szkła, wraz z poleceniami i ograniczeniami pokrycia.
 
-Testy jednostkowe znajdują się w `LaunchNextTests` i uruchamia się je poleceniem:
+Testy jednostkowe znajdują się w `launchTests` i uruchamia się je poleceniem:
 
 ```sh
-xcodebuild test -scheme LaunchNext -destination 'platform=macOS'
+xcodebuild test -scheme launch -destination 'platform=macOS'
 ```
 
 ## Przyszłość zarządzania aplikacjami
 
-Gdy Apple odchodzi od konfigurowalnych interfejsów, LaunchNext jest krokiem w stronę kontroli i personalizacji po stronie użytkownika. Nadal mam nadzieję, że Apple przywróci Launchpada.
+Gdy Apple odchodzi od konfigurowalnych interfejsów, launch jest krokiem w stronę kontroli i personalizacji po stronie użytkownika. Nadal mam nadzieję, że Apple przywróci Launchpada.
 
-**LaunchNext** to nie tylko zamiennik Launchpada — to deklaracja, że wybór użytkownika ma znaczenie.
+**launch** to nie tylko zamiennik Launchpada — to deklaracja, że wybór użytkownika ma znaczenie.
 
 
 ---
 
-**LaunchNext** - odzyskaj swój launcher aplikacji 🚀
+**launch** - odzyskaj swój launcher aplikacji 🚀
 
 *Stworzony dla użytkowników macOS, którzy nie godzą się na kompromisy w personalizacji.*
 
@@ -255,4 +255,4 @@ Gdy Apple odchodzi od konfigurowalnych interfejsów, LaunchNext jest krokiem w s
 - Obsługa eksperymentalnych gestów opiera się na [OpenMultitouchSupport](https://github.com/Kyome22/OpenMultitouchSupport) oraz forku autorstwa [KrishKrosh](https://github.com/KrishKrosh/OpenMultitouchSupport).❤️
 
 
-![GitHub downloads](https://img.shields.io/github/downloads/RoversX/LaunchNext/total)
+![GitHub downloads](https://img.shields.io/github/downloads/yongzhuanghuo/launch/total)

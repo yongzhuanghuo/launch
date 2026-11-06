@@ -14,25 +14,25 @@ parser.add_argument('--baseline-ref', help='Reproduce the stuck drag using Launc
 parser.add_argument('--work-dir', type=Path, help='Keep/reuse build artifacts in this directory')
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[2]
-work = (args.work_dir or Path(tempfile.mkdtemp(prefix='launchnext-legacy-drag-'))).resolve()
+work = (args.work_dir or Path(tempfile.mkdtemp(prefix='launch-legacy-drag-'))).resolve()
 if work == root or root in work.parents:
     raise ValueError('The diagnostic work directory must be outside the repository.')
 work.mkdir(parents=True, exist_ok=True)
-for name in ['LaunchNext', 'LaunchNext.xcodeproj']:
+for name in ['launch', 'launch.xcodeproj']:
     shutil.copytree(root / name, work / name, dirs_exist_ok=True)
-for name in ['Config', 'LaunchNextContextMenuCore', 'LaunchNextWallpaperCore', 'LaunchNextTests', 'UpdaterScripts'] + [p.name for p in root.glob('*.lproj')]:
+for name in ['Config', 'launchContextMenuCore', 'launchWallpaperCore', 'launchTests', 'UpdaterScripts'] + [p.name for p in root.glob('*.lproj')]:
     target = work / name
     if not target.exists():
         target.symlink_to(root / name, target_is_directory=True)
 
-entry = work / 'LaunchNext/LaunchpadApp.swift'
+entry = work / 'launch/LaunchpadApp.swift'
 source = entry.read_text()
 marker = '@main\nstruct LaunchpadApp'
 assert source.count(marker) == 1
 entry.write_text(source.replace(marker, 'struct LaunchpadApp', 1))
 
 # Keep production model operations; skip real scans, hotkeys, persistence and startup observers.
-store = work / 'LaunchNext/AppStore.swift'
+store = work / 'launch/AppStore.swift'
 source = store.read_text()
 start = source.index('    init() {', source.index('final class AppStore'))
 end = source.index('{', start) + 1
@@ -44,7 +44,7 @@ while depth:
         depth -= 1
     end += 1
 store.write_text(source[:start] + '''    init() {
-        customIconFileURL = URL(fileURLWithPath: "/tmp/launchnext-legacy-drag-icon.png")
+        customIconFileURL = URL(fileURLWithPath: "/tmp/launch-legacy-drag-icon.png")
         defaultAppIcon = NSImage(size: NSSize(width: 32, height: 32))
         currentAppIcon = defaultAppIcon
         hasCustomAppIcon = false
@@ -57,8 +57,8 @@ store.write_text(source[:start] + '''    init() {
         isInitialLoading = false
     }''' + source[end:])
 
-view = work / 'LaunchNext/LaunchpadView.swift'
-source = (subprocess.check_output(['git', 'show', f'{args.baseline_ref}:LaunchNext/LaunchpadView.swift'], cwd=root, text=True)
+view = work / 'launch/LaunchpadView.swift'
+source = (subprocess.check_output(['git', 'show', f'{args.baseline_ref}:launch/LaunchpadView.swift'], cwd=root, text=True)
           if args.baseline_ref else view.read_text())
 # No wallpaper/cache writes and no real app scans in the test window.
 begin = source.index('    private func refreshBackgroundImage(')
@@ -90,19 +90,19 @@ extension LaunchpadView {
     'MONITORING', 'false' if args.baseline_ref else 'legacyItemDragSession?.eventMonitor != nil').replace(
     'FINISH_HOOK', '' if args.baseline_ref else 'LegacyDragProbe.finishAgain = { endLegacyItemDrag() }')
 view.write_text(source)
-shutil.copy2(root / 'scripts/diagnostics/LegacyDragIntegration.swift', work / 'LaunchNext/')
+shutil.copy2(root / 'scripts/diagnostics/LegacyDragIntegration.swift', work / 'launch/')
 log = work / 'build.log'
 print(f'Artifacts: {work}', flush=True)
 with log.open('w') as output:
-    result = subprocess.run(['xcodebuild', 'build', '-project', str(work / 'LaunchNext.xcodeproj'),
-                             '-scheme', 'LaunchNext', '-configuration', 'Debug',
+    result = subprocess.run(['xcodebuild', 'build', '-project', str(work / 'launch.xcodeproj'),
+                             '-scheme', 'launch', '-configuration', 'Debug',
                              '-derivedDataPath', str(work / 'DerivedData'), '-destination', f'platform=macOS,arch={platform.machine()}',
-                             'CODE_SIGNING_ALLOWED=NO', 'PRODUCT_BUNDLE_IDENTIFIER=local.launchnext.legacydragprobe'],
+                             'CODE_SIGNING_ALLOWED=NO', 'PRODUCT_BUNDLE_IDENTIFIER=local.launch.legacydragprobe'],
                             stdout=output, stderr=subprocess.STDOUT)
 if result.returncode:
     raise RuntimeError(f'Build failed: {log}')
-binary = work / 'DerivedData/Build/Products/Debug/LaunchNext.app/Contents/MacOS/LaunchNext'
-with Path('/tmp/launchnext-legacy-drag-probe.lock').open('w') as lock:
+binary = work / 'DerivedData/Build/Products/Debug/launch.app/Contents/MacOS/launch'
+with Path('/tmp/launch-legacy-drag-probe.lock').open('w') as lock:
     # Visible test windows must not steal focus from a concurrent baseline run.
     fcntl.flock(lock, fcntl.LOCK_EX)
     subprocess.run([str(binary)] + (['--expect-stuck'] if args.baseline_ref else []), check=True, timeout=90,

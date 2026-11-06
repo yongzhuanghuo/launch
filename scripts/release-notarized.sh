@@ -4,15 +4,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-PROJECT_PATH="${ROOT_DIR}/LaunchNext.xcodeproj"
-SCHEME="LaunchNext"
+PROJECT_PATH="${ROOT_DIR}/launch.xcodeproj"
+SCHEME="launch"
 CONFIGURATION="Release"
 
-TEAM_ID="${LAUNCHNEXT_TEAM_ID:-}"
-NOTARY_PROFILE="${LAUNCHNEXT_NOTARY_PROFILE:-LaunchNext-notary}"
-POLL_INTERVAL_SECONDS="${LAUNCHNEXT_NOTARY_POLL_INTERVAL_SECONDS:-30}"
+TEAM_ID="${LAUNCH_TEAM_ID:-}"
+NOTARY_PROFILE="${LAUNCH_NOTARY_PROFILE:-launch-notary}"
+POLL_INTERVAL_SECONDS="${LAUNCH_NOTARY_POLL_INTERVAL_SECONDS:-30}"
 RUN_ID="$(date '+%Y%m%d-%H%M%S')"
-RELEASE_ROOT="${LAUNCHNEXT_NOTARIZED_BUILD_DIR:-${ROOT_DIR}/build/.release-work/${RUN_ID}}"
+RELEASE_ROOT="${LAUNCH_NOTARIZED_BUILD_DIR:-${ROOT_DIR}/build/.release-work/${RUN_ID}}"
 RELEASE_ASSETS_PATH="${ROOT_DIR}/build/release"
 RESUME_MODE="NO"
 MODE=""
@@ -20,7 +20,7 @@ LOCAL_INPUT_PATH=""
 
 usage() {
   cat <<'EOF'
-Create a Developer ID-signed, notarized LaunchNext release.
+Create a Developer ID-signed, notarized launch release.
 
 Usage:
   ./scripts/release-notarized.sh [options]
@@ -28,7 +28,7 @@ Usage:
 Options:
   --notarize              build, upload to Apple, and notarize using the CLI
   --local PATH            use an existing local .app or .zip
-  --keychain-profile NAME  notarytool Keychain profile (default: LaunchNext-notary)
+  --keychain-profile NAME  notarytool Keychain profile (default: launch-notary)
   --team-id TEAM_ID        override automatic Apple Developer Team detection
   --output-dir PATH        generated archive, exported app, logs, and release assets
   --resume PATH            resume an existing submission without rebuilding or re-uploading
@@ -40,7 +40,7 @@ Temporary builds use build/.release-work; failed runs remain resumable.
 Custom output directories are preserved.
 
 One-time local setup (credentials are stored in macOS Keychain, not this repo):
-  xcrun notarytool store-credentials "LaunchNext-notary" \
+  xcrun notarytool store-credentials "launch-notary" \
     --apple-id "YOUR_APPLE_ID" \
     --team-id "YOUR_TEAM_ID"
 
@@ -206,7 +206,7 @@ if [[ "${RESUME_MODE}" == "YES" && ! -d "${RELEASE_ROOT}" ]]; then
 fi
 
 if [[ ! "${POLL_INTERVAL_SECONDS}" =~ ^[1-9][0-9]*$ ]]; then
-  echo "error: LAUNCHNEXT_NOTARY_POLL_INTERVAL_SECONDS must be a positive integer" >&2
+  echo "error: LAUNCH_NOTARY_POLL_INTERVAL_SECONDS must be a positive integer" >&2
   exit 1
 fi
 
@@ -231,12 +231,12 @@ if [[ "${MODE}" != "local" ]]; then
   fi
 fi
 
-ARCHIVE_PATH="${RELEASE_ROOT}/LaunchNext.xcarchive"
+ARCHIVE_PATH="${RELEASE_ROOT}/launch.xcarchive"
 DERIVED_DATA_PATH="${RELEASE_ROOT}/DerivedData"
 EXPORT_PATH="${RELEASE_ROOT}/export"
 DIST_PATH="${RELEASE_ROOT}/dist"
 EXPORT_OPTIONS_PATH="${RELEASE_ROOT}/ExportOptions.plist"
-NOTARY_SUBMISSION_PATH="${RELEASE_ROOT}/LaunchNext-notary-submission.zip"
+NOTARY_SUBMISSION_PATH="${RELEASE_ROOT}/launch-notary-submission.zip"
 NOTARY_RESULT_PATH="${RELEASE_ROOT}/notary-result.json"
 NOTARY_STATUS_PATH="${RELEASE_ROOT}/notary-status.json"
 NOTARY_LOG_PATH="${RELEASE_ROOT}/notary-log.json"
@@ -262,6 +262,15 @@ if [[ "${MODE}" == "notarize" ]]; then
     --arch arm64 \
     --arch x86_64 \
     --product SwiftUpdater
+
+  # SwiftPM 6 把 universal 产物放在 .build/out/Products/Release；
+  # Xcode 的 Run Script 仍优先读 .build/apple/Products/Release，这里做一次兼容拷贝。
+  MODERN_UPDATER="${ROOT_DIR}/UpdaterScripts/SwiftUpdater/.build/out/Products/Release/SwiftUpdater"
+  LEGACY_UPDATER_DIR="${ROOT_DIR}/UpdaterScripts/SwiftUpdater/.build/apple/Products/Release"
+  if [[ -f "${MODERN_UPDATER}" ]]; then
+    mkdir -p "${LEGACY_UPDATER_DIR}"
+    cp -f "${MODERN_UPDATER}" "${LEGACY_UPDATER_DIR}/SwiftUpdater"
+  fi
 
   echo "Creating the Xcode archive..."
   xcodebuild \
@@ -291,7 +300,7 @@ if [[ "${MODE}" == "notarize" ]]; then
     -allowProvisioningUpdates
 fi
 
-APP_PATH="${EXPORT_PATH}/LaunchNext.app"
+APP_PATH="${EXPORT_PATH}/launch.app"
 UPDATER_PATH="${APP_PATH}/Contents/Resources/Updater/SwiftUpdater"
 
 if [[ "${MODE}" == "local" ]]; then
@@ -314,10 +323,10 @@ if [[ "${MODE}" == "local" ]]; then
     LOCAL_APP_CANDIDATES=()
     while IFS= read -r -d '' LOCAL_APP_CANDIDATE; do
       LOCAL_APP_CANDIDATES+=("${LOCAL_APP_CANDIDATE}")
-    done < <(find "${LOCAL_EXTRACT_PATH}" -maxdepth 4 -type d -name 'LaunchNext.app' -print0)
+    done < <(find "${LOCAL_EXTRACT_PATH}" -maxdepth 4 -type d -name 'launch.app' -print0)
 
     if [[ ${#LOCAL_APP_CANDIDATES[@]} -ne 1 ]]; then
-      echo "error: expected exactly one LaunchNext.app in ${LOCAL_INPUT_PATH}" >&2
+      echo "error: expected exactly one launch.app in ${LOCAL_INPUT_PATH}" >&2
       exit 1
     fi
 
@@ -343,7 +352,7 @@ BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${APP_PATH}
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${APP_PATH}/Contents/Info.plist")"
 APP_EXECUTABLE_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "${APP_PATH}/Contents/Info.plist")"
 
-if [[ "${BUNDLE_ID}" != "com.roversx.launchnext" ]]; then
+if [[ "${BUNDLE_ID}" != "com.roversx.launch" ]]; then
   echo "error: unexpected bundle identifier: ${BUNDLE_ID}" >&2
   exit 1
 fi
@@ -386,7 +395,7 @@ require_release_architectures() {
 }
 
 echo "Verifying universal binary architectures..."
-require_release_architectures "${APP_EXECUTABLE_PATH}" "LaunchNext"
+require_release_architectures "${APP_EXECUTABLE_PATH}" "launch"
 require_release_architectures "${UPDATER_PATH}" "SwiftUpdater"
 
 echo "Verifying Developer ID signatures..."
@@ -399,7 +408,7 @@ APP_TEAM_ID="$(printf '%s\n' "${APP_SIGNATURE}" | awk -F= '$1 == "TeamIdentifier
 UPDATER_TEAM_ID="$(printf '%s\n' "${UPDATER_SIGNATURE}" | awk -F= '$1 == "TeamIdentifier" { print $2; exit }')"
 
 if [[ -z "${APP_TEAM_ID}" || -z "${UPDATER_TEAM_ID}" ]]; then
-  echo "error: LaunchNext and SwiftUpdater must both contain a Developer ID team identifier" >&2
+  echo "error: launch and SwiftUpdater must both contain a Developer ID team identifier" >&2
   exit 1
 fi
 
@@ -409,7 +418,7 @@ if [[ -z "${TEAM_ID}" ]]; then
 fi
 
 if [[ "${APP_TEAM_ID}" != "${TEAM_ID}" ]]; then
-  echo "error: LaunchNext is not signed by expected team ${TEAM_ID}" >&2
+  echo "error: launch is not signed by expected team ${TEAM_ID}" >&2
   exit 1
 fi
 
@@ -419,7 +428,7 @@ if [[ "${UPDATER_TEAM_ID}" != "${TEAM_ID}" ]]; then
 fi
 
 if [[ "${APP_SIGNATURE}" != *"runtime"* || "${UPDATER_SIGNATURE}" != *"runtime"* ]]; then
-  echo "error: LaunchNext and SwiftUpdater must both use Hardened Runtime" >&2
+  echo "error: launch and SwiftUpdater must both use Hardened Runtime" >&2
   exit 1
 fi
 
@@ -523,7 +532,7 @@ xcrun stapler validate "${APP_PATH}"
 codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
 spctl --assess --type execute --verbose=4 "${APP_PATH}"
 
-ZIP_NAME="LaunchNext${VERSION}.zip"
+ZIP_NAME="launch-${VERSION}.zip"
 ZIP_PATH="${DIST_PATH}/${ZIP_NAME}"
 CHECKSUMS_PATH="${DIST_PATH}/checksums.txt"
 
@@ -541,6 +550,15 @@ fi
   shasum -a 256 "${ZIP_NAME}" >"${CHECKSUMS_PATH}"
 )
 
+# 新用户下载用 DMG（与 Downie6 一样：左侧教程图、右侧 app + Applications）
+DMG_NAME="launch-${VERSION}.dmg"
+DMG_PATH="${DIST_PATH}/${DMG_NAME}"
+"${ROOT_DIR}/scripts/create-dmg.sh" "${APP_PATH}" "${DMG_PATH}" "${VERSION}"
+(
+  cd "${DIST_PATH}"
+  shasum -a 256 "${DMG_NAME}" >>"${CHECKSUMS_PATH}"
+)
+
 SHA256="$(awk '{print $1}' "${CHECKSUMS_PATH}")"
 
 touch "${RELEASE_ROOT}/.release-success"
@@ -550,7 +568,7 @@ rm -f -- "${NOTARY_SUBMISSION_PATH}"
 # Stage the two downloadable assets before replacing the previous release.
 mkdir -p "${ROOT_DIR}/build/.release-work"
 ASSETS_STAGE="$(mktemp -d "${ROOT_DIR}/build/.release-work/assets.XXXXXX")"
-cp -p "${ZIP_PATH}" "${CHECKSUMS_PATH}" "${ASSETS_STAGE}/"
+cp -p "${ZIP_PATH}" "${CHECKSUMS_PATH}" "${DMG_PATH}" "${ASSETS_STAGE}/"
 ASSETS_OLD="${ASSETS_STAGE}.previous"
 if [[ -e "${RELEASE_ASSETS_PATH}" || -L "${RELEASE_ASSETS_PATH}" ]]; then
   mv "${RELEASE_ASSETS_PATH}" "${ASSETS_OLD}"
@@ -571,7 +589,7 @@ if [[ "$(dirname "${RELEASE_ROOT}")" == "${WORK_PARENT}" ]]; then
     rm -rf -- "${DIST_PATH}"
     mv "${RELEASE_ROOT}" "${BUILD_PATH}"
     RELEASE_ROOT="${BUILD_PATH}"
-    APP_PATH="${BUILD_PATH}/export/LaunchNext.app"
+    APP_PATH="${BUILD_PATH}/export/launch.app"
   fi
 fi
 ZIP_PATH="${RELEASE_ASSETS_PATH}/${ZIP_NAME}"
@@ -581,6 +599,7 @@ echo
 echo "Notarized release artifacts:"
 echo "  App: ${APP_PATH}"
 echo "  ${ZIP_PATH}"
+echo "  ${DMG_PATH}"
 echo "  ${CHECKSUMS_PATH}"
 echo
 echo "Version: ${VERSION}"

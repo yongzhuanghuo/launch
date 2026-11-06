@@ -14,7 +14,7 @@ import SwiftUI
         let window = NSWindow(
             contentRect: CGRect(x: 160, y: 180, width: 960, height: 720), styleMask: [.titled, .resizable],
             backing: .buffered, defer: false)
-        window.title = "LaunchNext · CA folder opening verification"
+        window.title = "launch · CA folder opening verification"
         let root = NSView(frame: CGRect(x: 0, y: 0, width: 960, height: 720))
         root.wantsLayer = true
         let gradient = CAGradientLayer()
@@ -62,7 +62,7 @@ import SwiftUI
         Task { @MainActor in
             do {
                 try await Task.sleep(for: .milliseconds(200))
-                if ProcessInfo.processInfo.environment["LAUNCHNEXT_LABEL_CONTRAST_CHECK_ONLY"] == "1" {
+                if ProcessInfo.processInfo.environment["LAUNCH_LABEL_CONTRAST_CHECK_ONLY"] == "1" {
                     let context = CGContext(data: nil, width: 64, height: 64, bitsPerComponent: 8,
                         bytesPerRow: 256, space: CGColorSpace(name: CGColorSpace.sRGB)!,
                         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
@@ -163,7 +163,7 @@ import SwiftUI
                     app.terminate(nil)
                     return
                 }
-                if ProcessInfo.processInfo.environment["LAUNCHNEXT_REORDER_CHECK_ONLY"] == "1" {
+                if ProcessInfo.processInfo.environment["LAUNCH_REORDER_CHECK_ONLY"] == "1" {
                     let folderGrid = CAFolderGridView(frame: root.bounds)
                     root.addSubview(folderGrid)
                     folderGrid.apps = apps

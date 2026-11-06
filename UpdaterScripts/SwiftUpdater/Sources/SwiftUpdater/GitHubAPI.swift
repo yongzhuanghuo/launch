@@ -24,9 +24,32 @@ struct ReleaseMetadata: Decodable {
     }
 }
 
+struct ReleaseManifest: Decodable {
+    let version: String
+    let build: Int
+    let url: String
+    let sha256: String
+    let size: Int
+    let changelog: String?
+    let force: Bool?
+}
+
+enum ReleaseFeed {
+    static func latest(feedURL: URL) async throws -> ReleaseManifest {
+        var request = URLRequest(url: feedURL)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.timeoutInterval = 15
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw UpdaterError.network("Version feed returned an invalid response")
+        }
+        return try JSONDecoder().decode(ReleaseManifest.self, from: data)
+    }
+}
+
 enum GitHubClient {
-    static let owner = "RoversX"
-    static let repo = "LaunchNext"
+    static let owner = "yongzhuanghuo"
+    static let repo = "launch"
 
     static func latestRelease(tag overrideTag: String?, token: String?) async throws -> ReleaseMetadata {
         let url: URL

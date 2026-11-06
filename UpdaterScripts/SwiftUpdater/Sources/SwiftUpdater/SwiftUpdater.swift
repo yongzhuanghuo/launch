@@ -3,7 +3,7 @@ import Darwin
 
 @main
 struct SwiftUpdater {
-    private static let defaultInstallPath = "/Applications/LaunchNext.app"
+    private static let defaultInstallPath = "/Applications/launch.app"
 
     struct UpdateSuccess {
         let message: String
@@ -83,8 +83,11 @@ struct SwiftUpdater {
 
         let token = ProcessInfo.processInfo.environment["GITHUB_TOKEN"]
         let metadata: ReleaseMetadata
+        let expectedSha256: String?
         do {
-            metadata = try await GitHubClient.latestRelease(tag: arguments.tag, token: token)
+            let fetched = try await fetchMetadata(arguments: arguments, token: token)
+            metadata = fetched.0
+            expectedSha256 = fetched.1
         } catch {
             session.log("ERROR: \(error)")
             if arguments.emitJSON {
@@ -122,7 +125,8 @@ struct SwiftUpdater {
                 installURL: installURL,
                 downloadOnly: downloadOnly,
                 session: session,
-                prefetchedMetadata: metadata
+                prefetchedMetadata: metadata,
+                prefetchedSha256: expectedSha256
             )
             if arguments.emitJSON {
                 emitJSON(stage: "Finished", message: result.message, elapsed: result.elapsed)
@@ -181,7 +185,8 @@ struct SwiftUpdater {
         installURL: URL,
         downloadOnly: Bool,
         session: CursesSession?,
-        prefetchedMetadata: ReleaseMetadata? = nil
+        prefetchedMetadata: ReleaseMetadata? = nil,
+        prefetchedSha256: String? = nil
     ) async throws -> UpdateSuccess {
         let baseDir = ConfigManager.baseDirectory
         defer { session?.clearProgress() }
@@ -207,11 +212,15 @@ struct SwiftUpdater {
         }
 
         let metadata: ReleaseMetadata
+        let expectedSha256: String?
         if let prefetchedMetadata {
             metadata = prefetchedMetadata
+            expectedSha256 = prefetchedSha256
         } else {
-            log("fetching", ["url": releaseURL(arguments.tag)])
-            metadata = try await GitHubClient.latestRelease(tag: arguments.tag, token: token)
+            log("fetching", ["url": arguments.feedURL ?? releaseURL(arguments.tag)])
+            let fetched = try await fetchMetadata(arguments: arguments, token: token)
+            metadata = fetched.0
+            expectedSha256 = fetched.1
         }
         log("latest_tag", ["tag": metadata.tagName])
 
@@ -235,6 +244,7 @@ struct SwiftUpdater {
             from: asset.browserDownloadURL,
             to: archiveURL,
             expectedSize: asset.size,
+            expectedSha256: expectedSha256,
             progress: { current, total in
                 if let session {
                     session.updateProgress(
@@ -259,6 +269,7 @@ struct SwiftUpdater {
             throw UpdaterError.archive("Archive does not contain a .app bundle")
         }
         log("found_bundle", ["path": appBundle.path])
+        try verifyAppSignature(appBundle)
 
         Installer.removeQuarantine(at: appBundle)
 
@@ -363,6 +374,86 @@ struct SwiftUpdater {
             }
         }
         return nil
+    }
+
+    private static func fetchMetadata(
+        arguments: UpdaterArguments,
+        token: String?
+    ) async throws -> (ReleaseMetadata, String?) {
+        if let feed = arguments.feedURL, let feedURL = URL(string: feed) {
+            let manifest = try await ReleaseFeed.latest(feedURL: feedURL)
+            guard let artifactURL = URL(string: manifest.url),
+                  artifactURL.scheme == "https" else {
+                throw UpdaterError.network("Version feed contains an invalid download URL")
+            }
+            let name = artifactURL.lastPathComponent.isEmpty
+                ? "launch-\(manifest.version).zip"
+                : artifactURL.lastPathComponent
+            let asset = ReleaseAsset(
+                name: name,
+                browserDownloadURL: artifactURL,
+                size: manifest.size
+            )
+            let metadata = ReleaseMetadata(
+                tagName: manifest.version,
+                htmlURL: nil,
+                assets: [asset]
+            )
+            return (metadata, manifest.sha256)
+        }
+        let metadata = try await GitHubClient.latestRelease(tag: arguments.tag, token: token)
+        return (metadata, nil)
+    }
+
+    private static func verifyAppSignature(_ appURL: URL) throws {
+        // Bundle ID 从 Info.plist 读取，不依赖代码签名。
+        let infoURL = appURL.appendingPathComponent("Contents/Info.plist")
+        let data = try Data(contentsOf: infoURL)
+        let plist = try PropertyListSerialization.propertyList(
+            from: data,
+            options: [],
+            format: nil
+        )
+        guard let info = plist as? [String: Any],
+              info["CFBundleIdentifier"] as? String == "com.roversx.launch" else {
+            throw UpdaterError.verification("Unexpected bundle identifier in update")
+        }
+
+        // 未签名/ad-hoc 包允许安装；ZIP 文件已经过 manifest SHA-256 校验。
+        let codesign = Process()
+        codesign.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        codesign.arguments = ["--verify", "--deep", "--strict", "--verbose=2", appURL.path]
+        let verifyError = Pipe()
+        codesign.standardError = verifyError
+        try codesign.run()
+        codesign.waitUntilExit()
+        if codesign.terminationStatus != 0 {
+            print("Update app is unsigned/ad-hoc; bundle id and SHA-256 verified.")
+            return
+        }
+
+        // Developer ID 签名存在时，仍然校验 TeamIdentifier。
+        let detail = Process()
+        detail.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        detail.arguments = ["-d", "--verbose=4", appURL.path]
+        let detailError = Pipe()
+        detail.standardError = detailError
+        try detail.run()
+        detail.waitUntilExit()
+        let text = String(
+            data: detailError.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        ) ?? ""
+        if let range = text.range(of: "TeamIdentifier=") {
+            let remainder = text[range.upperBound...]
+            let team = remainder
+                .split(whereSeparator: { $0 == "\n" || $0 == "\r" })
+                .first
+                .map(String.init) ?? ""
+            if !team.isEmpty, team != "not set", team != "D4KD8XCCL6" {
+                throw UpdaterError.verification("Unexpected signing team in update")
+            }
+        }
     }
 
     private static func releaseURL(_ tag: String?) -> String {

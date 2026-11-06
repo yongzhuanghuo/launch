@@ -1,7 +1,7 @@
 # BuhoLaunchpad 1:1 复刻方案（主界面 + 核心交互）
 
 > 状态：已确认，开始实施。
-> 基线：在 `/Users/Admin/project/Launch` 的 **LaunchNext** 上改造，不另起项目。
+> 基线：在 `/Users/Admin/project/Launch` 的 **launch** 上改造，不另起项目。
 > 参考对象：`/Applications/BuhoLaunchpad.app`（2.0.2，build 56）。
 > 本次范围：**全部功能与 UI 交互（1:1 Buho）**，包括主界面、独立设置窗口、右键菜单、多场景、自由布局、紧凑页面、App 位置、隐藏 App、菜单栏图标、Dock 置留、多屏显示、快捷键、备份/恢复、旧版布局导入等。
 > 暂缓到 2.0：**购买/试用/激活/许可证/设备绑定/购买页**。不复制 Buho 的专有代码与素材。
@@ -10,7 +10,7 @@
 
 ## 1. 结论摘要
 
-1. **LaunchNext 已具备约 70–80% 的底层能力**：应用扫描、图标缓存、7×5 网格、文件夹、拖拽、分页、搜索、壁纸背景、热区、触控板手势、隐藏 App、旧版 Launchpad 导入、备份等。直接重写不划算。
+1. **launch 已具备约 70–80% 的底层能力**：应用扫描、图标缓存、7×5 网格、文件夹、拖拽、分页、搜索、壁纸背景、热区、触控板手势、隐藏 App、旧版 Launchpad 导入、备份等。直接重写不划算。
 2. 与 BuhoLaunchpad 的主要差距不在功能数量，而在**默认呈现和交互细节**：
    - 默认是紧凑浮窗；Buho 始终全屏、铺满屏幕。
    - 默认不隐藏菜单栏；Buho 隐藏菜单栏但保留 Dock。
@@ -18,8 +18,8 @@
    - 搜索框过宽，菜单按钮在搜索框外；Buho 是窄胶囊搜索框，菜单按钮在框内。
    - 搜索结果按整页网格展示；Buho 是单行结果 + 首项选中高亮。
    - 文件夹面板比例、标题位置/字号、页点尺寸与 Buho 不同。
-   - 右键菜单是 LaunchNext 的超集；Buho 只有少量固定项，且空白处有独立背景菜单。
-3. **推荐做法**：在 LaunchNext 内增加一个默认开启的 **Classic（Buho 兼容）呈现模式**，复用现有引擎；关闭该模式可回到 LaunchNext 原样式，便于对比和回退。不做新 target，不复制 Buho 的代码/素材。
+   - 右键菜单是 launch 的超集；Buho 只有少量固定项，且空白处有独立背景菜单。
+3. **推荐做法**：在 launch 内增加一个默认开启的 **Classic（Buho 兼容）呈现模式**，复用现有引擎；关闭该模式可回到 launch 原样式，便于对比和回退。不做新 target，不复制 Buho 的代码/素材。
 4. **本次全量范围**：主界面 + 核心交互 + 独立设置窗口（6 分区）+ 多场景/自由布局/紧凑页面 + 菜单栏图标/Dock 置留/多屏显示/快捷键 + App 位置/隐藏 App/备份恢复/旧版导入。先保证功能跑通，再做像素校准。
 5. **购买/激活全部移除**：不做购买、试用、许可证、设备绑定、购买页。若后续需要身份标识，只保留一个**本地邮箱输入**（不联网、不校验），2.0 再讨论。
 6. **预计工期**：全量功能约 **18–25 个工作日**（先功能、后像素）；如果只求功能跑通、暂不追像素，可压缩到 **10–14 天**。
@@ -43,23 +43,23 @@
 - 本机 **没有可用的反编译引擎**：Ghidra 未配置（`GHIDRA_INSTALL_DIR` 为空）、Hopper 未安装、IDA/Kuna 未配置。REA 的 Mach-O 检查、字符串、符号、Core Data、AX、截图可用，但**没有拿到函数级伪代码**。
 - 因此本方案的行为结论来自“发布产物元数据 + 运行时 UI 观察”，足以指导重构，但不能保证动画曲线、模糊半径等算法级完全一致；这些需要在实现阶段用截图/录屏逐项校准。
 - 如果后续必须做函数级确认，可安装 Ghidra 12.1.x 并设置 `GHIDRA_INSTALL_DIR`（需要你确认下载与安装），或用 Hopper/IDA。此事项不影响本方案启动。
-- **清洁室原则**：不复制 Buho 的源码、Assets.car、AppIcon、专有图片/文案素材；只复刻可观察的行为与布局。LaunchNext 是 GPLv3，若对外分发需遵守 GPL。
+- **清洁室原则**：不复制 Buho 的源码、Assets.car、AppIcon、专有图片/文案素材；只复刻可观察的行为与布局。launch 是 GPLv3，若对外分发需遵守 GPL。
 
 ---
 
 ## 3. 两个项目的现状
 
-### 3.1 LaunchNext（本仓库）
+### 3.1 launch（本仓库）
 
-- 入口：[LaunchpadApp.swift](../LaunchNext/LaunchpadApp.swift)，`AppDelegate` 创建无边框浮窗（level `.floating`，`isOpaque=false`），默认紧凑模式，可选全屏模式。
-- 主界面：[LaunchpadView.swift](../LaunchNext/LaunchpadView.swift)，SwiftUI 布局 + 可选 Core Animation 网格（`CAGridView`）。
-- 状态/数据：[AppStore.swift](../LaunchNext/AppStore.swift)，SwiftData + UserDefaults；`AppInfo`/`FolderInfo` 模型。
-- 文件夹：[FolderView.swift](../LaunchNext/FolderView.swift)、[CAFolderPresentation.swift](../LaunchNext/CAFolderPresentation.swift)、`CAFolderGridView`。
-- 搜索：[Search/LaunchpadSearchEngine.swift](../LaunchNext/Search/LaunchpadSearchEngine.swift)、[FuzzyMatcher.swift](../LaunchNext/Search/FuzzyMatcher.swift)。
-- 右键：[RightClickMenu.swift](../LaunchNext/RightClickMenu.swift)、[AppContextMenu.swift](../LaunchNext/AppContextMenu.swift)、`LaunchNextContextMenuCore`。
-- 旧版导入：[NativeLaunchpadImporter.swift](../LaunchNext/NativeLaunchpadImporter.swift)。
-- 壁纸：[BackgroundImageController.swift](../LaunchNext/BackgroundImageController.swift)、`LaunchNextWallpaperCore`。
-- 设置：[SettingsView.swift](../LaunchNext/SettingsView.swift)（单 sheet，13 个分区）。
+- 入口：[LaunchpadApp.swift](../launch/LaunchpadApp.swift)，`AppDelegate` 创建无边框浮窗（level `.floating`，`isOpaque=false`），默认紧凑模式，可选全屏模式。
+- 主界面：[LaunchpadView.swift](../launch/LaunchpadView.swift)，SwiftUI 布局 + 可选 Core Animation 网格（`CAGridView`）。
+- 状态/数据：[AppStore.swift](../launch/AppStore.swift)，SwiftData + UserDefaults；`AppInfo`/`FolderInfo` 模型。
+- 文件夹：[FolderView.swift](../launch/FolderView.swift)、[CAFolderPresentation.swift](../launch/CAFolderPresentation.swift)、`CAFolderGridView`。
+- 搜索：[Search/LaunchpadSearchEngine.swift](../launch/Search/LaunchpadSearchEngine.swift)、[FuzzyMatcher.swift](../launch/Search/FuzzyMatcher.swift)。
+- 右键：[RightClickMenu.swift](../launch/RightClickMenu.swift)、[AppContextMenu.swift](../launch/AppContextMenu.swift)、`launchContextMenuCore`。
+- 旧版导入：[NativeLaunchpadImporter.swift](../launch/NativeLaunchpadImporter.swift)。
+- 壁纸：[BackgroundImageController.swift](../launch/BackgroundImageController.swift)、`launchWallpaperCore`。
+- 设置：[SettingsView.swift](../launch/SettingsView.swift)（单 sheet，13 个分区）。
 - 当前默认值（新装）：
   - 非全屏（紧凑浮窗 4:3），`hideDock=false`，`hideMenuBar=false`
   - 不启用壁纸背景；背景样式 `glass`
@@ -79,7 +79,7 @@
 
 ### 3.3 能力对照（本次范围相关）
 
-| 能力 | Buho 行为 | LaunchNext 现状 | 处理 |
+| 能力 | Buho 行为 | launch 现状 | 处理 |
 |---|---|---|---|
 | 窗口形态 | 始终全屏、铺满屏幕（含菜单栏区域） | 默认紧凑浮窗；全屏可选 | Classic 模式默认全屏、无圆角、无外边距 |
 | 菜单栏 | 隐藏 | 默认显示；且隐藏菜单栏时会连带隐藏 Dock | 修 `updateSystemUIVisibility`，Classic 模式只隐藏菜单栏、保留 Dock |
@@ -93,7 +93,7 @@
 | App 右键 | 在 Finder 中显示 / 隐藏 App / 移动到分组 ▸ | 超集（复制路径、隔离、卸载、批量、Quick Launch 等） | Classic 模式只显示 3 项；新增“移动到分组”子菜单 |
 | 空白右键 | 设置 / 立即购买 / 激活 / 检查更新 / 重启 / 退出 | 无 | 新增背景菜单；去掉购买/激活，保留设置/检查更新/重启/退出 |
 | 显示/关闭 | 重新打开切换；App 切换/点击外部/快捷键关闭 | 已有 reopen 切换、resignMain 自动隐藏、热区/手势/快捷键 | 补齐“点击外部 mouse-up 关闭”，回归验证 |
-| 设置 | 独立 6 分区窗口 | 单 sheet，13 分区 | 新建 Buho 风格独立设置窗口（通用/外观/布局/应用位置/已隐藏 App/关于）；LaunchNext 额外能力收进“高级…”入口 |
+| 设置 | 独立 6 分区窗口 | 单 sheet，13 分区 | 新建 Buho 风格独立设置窗口（通用/外观/布局/应用位置/已隐藏 App/关于）；launch 额外能力收进“高级…”入口 |
 | 多场景/自由布局/紧凑页面 | 有 | 无（只有一次性经典预设） | 新增场景模型与切换、自由位置布局、紧凑页面算法 |
 | 菜单栏图标/Dock 置留/多屏显示位置 | 有 | 部分缺失 | 新增 NSStatusItem、Dock 置留、主屏/光标屏/Dock 屏选择 |
 | 上一页/下一页快捷键、Option 分组 | 有 | 部分缺失 | 新增可配置快捷键；补齐 Option 拖动分组语义 |
@@ -162,11 +162,11 @@
 
 ### 5.1 总体策略
 
-在 LaunchNext 中新增 **Classic 呈现模式**，默认开启：
+在 launch 中新增 **Classic 呈现模式**，默认开启：
 
 - 复用现有 `AppStore`、`AppInfo`、`FolderInfo`、图标缓存、扫描、搜索、拖拽、导入、壁纸、热区/手势。
 - 只替换“呈现层 + 部分交互策略”，不重写数据层。
-- 保留 LaunchNext 原样式作为可切换模式，便于回归对比；额外能力继续留在设置中。
+- 保留 launch 原样式作为可切换模式，便于回归对比；额外能力继续留在设置中。
 - 所有 Buho 相关常量集中到 `ClassicMetrics`，避免散落。
 
 新增状态建议：
@@ -174,7 +174,7 @@
 ```swift
 enum LaunchpadPresentationMode: String, Codable {
     case classic   // Buho 1:1 主界面
-    case modern    // LaunchNext 原样式
+    case modern    // launch 原样式
 }
 ```
 
@@ -184,18 +184,18 @@ enum LaunchpadPresentationMode: String, Codable {
 
 | 文件 | 改动 |
 |---|---|
-| [AppStore.swift](../LaunchNext/AppStore.swift) | 新增 `presentationMode`、`ClassicMetrics` 默认值/迁移；新装默认全屏、隐藏菜单栏、保留 Dock、启用壁纸 blur、关闭快速刷新、文件夹 paged |
-| [LaunchpadApp.swift](../LaunchNext/LaunchpadApp.swift) | Classic 模式窗口全屏/无圆角；修复 `updateSystemUIVisibility` 的“隐藏菜单栏连带隐藏 Dock”；对齐 show/hide 关闭触发 |
-| [LaunchpadView.swift](../LaunchNext/LaunchpadView.swift) | Classic 头部（窄搜索条、框内菜单按钮）、背景压暗/模糊、页点样式、网格指标、搜索结果分支 |
+| [AppStore.swift](../launch/AppStore.swift) | 新增 `presentationMode`、`ClassicMetrics` 默认值/迁移；新装默认全屏、隐藏菜单栏、保留 Dock、启用壁纸 blur、关闭快速刷新、文件夹 paged |
+| [LaunchpadApp.swift](../launch/LaunchpadApp.swift) | Classic 模式窗口全屏/无圆角；修复 `updateSystemUIVisibility` 的“隐藏菜单栏连带隐藏 Dock”；对齐 show/hide 关闭触发 |
+| [LaunchpadView.swift](../launch/LaunchpadView.swift) | Classic 头部（窄搜索条、框内菜单按钮）、背景压暗/模糊、页点样式、网格指标、搜索结果分支 |
 | **新增** `ClassicSearchResultsView.swift` | 单行结果、首项高亮、方向键/Enter/Esc |
-| [FolderView.swift](../LaunchNext/FolderView.swift) | Classic 文件夹标题在面板上方、22pt；7×5；>35 项才显示页点 |
-| [CAFolderPresentation.swift](../LaunchNext/CAFolderPresentation.swift) | 全屏比例 0.8×0.788，圆角 30；标题与网格的 inset 对齐 Buho |
-| [CAGridView.swift](../LaunchNext/CAGridView.swift) / `CAGridView+Layout.swift` | CA 引擎使用同一套 `ClassicMetrics`，保证 SwiftUI/CA 两条路径一致 |
-| [RightClickMenu.swift](../LaunchNext/RightClickMenu.swift) | Classic 菜单条目过滤；新增空白背景菜单 |
-| [AppContextMenu.swift](../LaunchNext/AppContextMenu.swift) + `LaunchNextContextMenuCore/AppContextMenuModel.swift` | 新增 `.moveToGroup` 动作/标题/路由；Classic 只暴露 3 项 |
-| [LaunchpadView.swift](../LaunchNext/LaunchpadView.swift) / [CAGridView+Input.swift](../LaunchNext/CAGridView+Input.swift) | Option 拖动分组语义；文件夹打开/关闭；点击外部关闭；翻页手势 |
-| [SettingsView.swift](../LaunchNext/SettingsView.swift) | 只补必要项：Classic/Modern 切换、菜单栏/ Dock 默认行为、背景模糊强度（若没有）；设置结构不重建 |
-| `LaunchNextTests/*` | 新增 ClassicMetrics、菜单过滤、presentation mode 迁移的单元测试 |
+| [FolderView.swift](../launch/FolderView.swift) | Classic 文件夹标题在面板上方、22pt；7×5；>35 项才显示页点 |
+| [CAFolderPresentation.swift](../launch/CAFolderPresentation.swift) | 全屏比例 0.8×0.788，圆角 30；标题与网格的 inset 对齐 Buho |
+| [CAGridView.swift](../launch/CAGridView.swift) / `CAGridView+Layout.swift` | CA 引擎使用同一套 `ClassicMetrics`，保证 SwiftUI/CA 两条路径一致 |
+| [RightClickMenu.swift](../launch/RightClickMenu.swift) | Classic 菜单条目过滤；新增空白背景菜单 |
+| [AppContextMenu.swift](../launch/AppContextMenu.swift) + `launchContextMenuCore/AppContextMenuModel.swift` | 新增 `.moveToGroup` 动作/标题/路由；Classic 只暴露 3 项 |
+| [LaunchpadView.swift](../launch/LaunchpadView.swift) / [CAGridView+Input.swift](../launch/CAGridView+Input.swift) | Option 拖动分组语义；文件夹打开/关闭；点击外部关闭；翻页手势 |
+| [SettingsView.swift](../launch/SettingsView.swift) | 只补必要项：Classic/Modern 切换、菜单栏/ Dock 默认行为、背景模糊强度（若没有）；设置结构不重建 |
+| `launchTests/*` | 新增 ClassicMetrics、菜单过滤、presentation mode 迁移的单元测试 |
 
 ### 5.3 关键实现点
 
@@ -236,13 +236,13 @@ enum LaunchpadPresentationMode: String, Codable {
 7. **交互**
    - Option 拖动分组：如果现有拖拽逻辑没有“按住 Option 不挤动其他图标”的语义，新增修饰键分支。
    - 点击面板外 mouse-up 关闭（现有背景点击关闭逻辑改为与 Buho 一致）。
-   - 页面翻页：保留现有滚轮/触控板/键盘；确认 ⌘←/⌘→ 或现有导航键行为（Buho 默认 ⌘←/⌘→，本次核心交互可先复用 LaunchNext 的键盘导航，快捷键自定义列为后续）。
+   - 页面翻页：保留现有滚轮/触控板/键盘；确认 ⌘←/⌘→ 或现有导航键行为（Buho 默认 ⌘←/⌘→，本次核心交互可先复用 launch 的键盘导航，快捷键自定义列为后续）。
    - 搜索与文件夹打开时禁用主网格滚动/拖拽，避免状态冲突。
 
 ### 5.4 本次明确不做（只保留以下例外）
 
 - **购买/试用/激活/许可证/设备绑定/购买页/统计上报**：全部移除，2.0 再讨论。若后续需要身份标识，只保留本地邮箱输入，不联网、不校验。
-- **不复制 Buho 的专有代码、图片、AppIcon、Assets.car 或文案素材**：只复刻可观察的布局与行为；LaunchNext 保持 GPLv3。
+- **不复制 Buho 的专有代码、图片、AppIcon、Assets.car 或文案素材**：只复刻可观察的布局与行为；launch 保持 GPLv3。
 - 其余功能与 UI 交互**全部纳入本次范围**，包括 5.2 之外的新增项：独立设置窗口、多场景、自由布局、紧凑页面、App 位置、隐藏 App、菜单栏图标、Dock 置留、多屏显示、上一页/下一页快捷键、Option 分组、备份/恢复、旧版布局导入。
 
 ---
@@ -291,10 +291,10 @@ swift build --configuration release --arch arm64 --arch x86_64 --product SwiftUp
 ### 7.3 Xcode 运行
 
 ```bash
-open /Users/Admin/project/Launch/LaunchNext.xcodeproj
+open /Users/Admin/project/Launch/launch.xcodeproj
 ```
 
-1. 选择 scheme `LaunchNext`。
+1. 选择 scheme `launch`。
 2. 运行目标选 **My Mac**，不要选 Any Mac。
 3. Signing & Capabilities：Team = None，证书 = Sign to Run Locally（README 的本地签名说明）。
 4. `⌘R`。
@@ -304,20 +304,20 @@ open /Users/Admin/project/Launch/LaunchNext.xcodeproj
 ```bash
 cd /Users/Admin/project/Launch
 
-xcodebuild -project LaunchNext.xcodeproj \
-  -scheme LaunchNext \
+xcodebuild -project launch.xcodeproj \
+  -scheme launch \
   -configuration Debug \
-  -derivedDataPath /tmp/launchnext-dd \
+  -derivedDataPath /tmp/launch-dd \
   CODE_SIGNING_ALLOWED=NO \
   build
 
-open /tmp/launchnext-dd/Build/Products/Debug/LaunchNext.app
+open /tmp/launch-dd/Build/Products/Debug/launch.app
 ```
 
 - 首次启动会扫描应用并显示 4 步引导；点“跳过引导”或“开始”。
 - 扫描/首次构建后窗口可能出现得稍晚，属正常。
 - 重建：重复 `xcodebuild` 命令即可。
-- 测试：`xcodebuild test -project LaunchNext.xcodeproj -scheme LaunchNext -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO`（若测试宿主需要签名，改用 Xcode 本地签名运行）。
+- 测试：`xcodebuild test -project launch.xcodeproj -scheme launch -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO`（若测试宿主需要签名，改用 Xcode 本地签名运行）。
 - 常见问题：
   - `SwiftUpdater binary not found` → 先执行 7.2。
   - 窗口不出现 → 看是否有引导页/扫描中；检查 Console 是否被系统 UI 遮挡；用 Dock 图标重新打开。
@@ -360,7 +360,7 @@ open /tmp/launchnext-dd/Build/Products/Debug/LaunchNext.app
 - [ ] 翻页/文件夹动画 60fps（或显示器刷新率）；无明显掉帧。
 - [ ] 图标/文件夹预览无明显闪烁；内存稳定。
 - [ ] 连续开关 50 次无泄漏/卡死；多显示器切换正常。
-- [ ] `xcodebuild test` 通过；现有 LaunchNext 功能（隐藏 App、导入、备份、卸载器、CLI）无回归。
+- [ ] `xcodebuild test` 通过；现有 launch 功能（隐藏 App、导入、备份、卸载器、CLI）无回归。
 
 ---
 
@@ -368,12 +368,12 @@ open /tmp/launchnext-dd/Build/Products/Debug/LaunchNext.app
 
 | 风险 | 说明 | 对策 |
 |---|---|---|
-| 菜单栏隐藏 vs Dock 可见 | LaunchNext 现有实现隐藏菜单栏时会连带隐藏 Dock；Buho 保留 Dock | 先做 `presentationOptions` spike；必要时改用窗口层级覆盖菜单栏 |
+| 菜单栏隐藏 vs Dock 可见 | launch 现有实现隐藏菜单栏时会连带隐藏 Dock；Buho 保留 Dock | 先做 `presentationOptions` spike；必要时改用窗口层级覆盖菜单栏 |
 | 壁纸捕获权限 | 实时桌面壁纸需要屏幕录制权限；Buho 可能用私有 API 取壁纸 | 默认静态预览 + 自定义图片；实时壁纸作为可选增强 |
 | 像素级动画/模糊 | 没有函数级反编译，模糊半径/动画曲线只能观察 | 截图/录屏迭代校准；把参数集中到 `ClassicMetrics`/外观配置 |
 | 双渲染引擎 | SwiftUI 和 CA 网格两套路径可能出现差异 | Classic 模式强制 CA 引擎；或两套共用 metrics 并加截图测试 |
-| 文件夹动画交接 | LaunchNext 的 CA 玻璃交接逻辑复杂，改比例可能影响动画 | 先改 geometry，再校动画；保留现代模式回退 |
-| 商业参考的版权/许可 | Buho 为商业软件；LaunchNext 为 GPLv3 | 只复刻行为/布局，不复制代码/素材；对外分发遵守 GPL，不使用 Buho 商标 |
+| 文件夹动画交接 | launch 的 CA 玻璃交接逻辑复杂，改比例可能影响动画 | 先改 geometry，再校动画；保留现代模式回退 |
+| 商业参考的版权/许可 | Buho 为商业软件；launch 为 GPLv3 | 只复刻行为/布局，不复制代码/素材；对外分发遵守 GPL，不使用 Buho 商标 |
 | Buho 版本变化 | 参考为 2.0.2 (56)，后续版本可能改 UI | 以本次截图/尺寸为基线；必要时重新采样 |
 | REA 引擎缺失 | 无法函数级反编译 | 需要时安装 Ghidra 12.1.x（需确认），或继续用 UI/字符串证据 |
 
@@ -383,7 +383,7 @@ open /tmp/launchnext-dd/Build/Products/Debug/LaunchNext.app
 
 已确认：
 
-- 基线：**改造 LaunchNext**，Classic 模式默认开启，保留 Modern 切换用于回退/对比。
+- 基线：**改造 launch**，Classic 模式默认开启，保留 Modern 切换用于回退/对比。
 - 范围：**全部功能与 UI 交互**（见第 5 节），先功能跑通，再做像素校准。
 - 额外能力：保留在“高级…”入口，不干扰 Buho 风格主界面。
 - **购买/试用/激活/许可证/购买页全部移除**；2.0 再讨论。若后续需要身份标识，只用**本地邮箱输入**（不联网、不校验）。
@@ -433,7 +433,7 @@ open /tmp/launchnext-dd/Build/Products/Debug/LaunchNext.app
 - 分析机屏幕处于锁定状态（锁屏界面），无法进行截图视觉自测；编译与进程级冒烟测试已通过。
   解锁后可以直接运行：
   ```bash
-  open /tmp/launchnext-dd/Build/Products/Debug/LaunchNext.app
+  open /tmp/launch-dd/Build/Products/Debug/launch.app
   ```
   如窗口未出现，使用菜单栏图标或再次 `open` 切换显示。
 
@@ -452,7 +452,7 @@ open /tmp/launchnext-dd/Build/Products/Debug/LaunchNext.app
 - 背景：当背景控制器没有图像时，直接读取当前桌面壁纸并做模糊，避免出现纯灰背景。
 - 搜索结果：超过 7 项时按页展示，首项高亮，页点可点击/键盘切换。
 - Option 分组：按住 Option 拖动时只允许合并到目标 App/文件夹，不再挤动其他图标。
-- 备份/恢复：Classic 布局页新增原生“备份…/恢复…”（复制 LaunchNext 数据目录，恢复后自动重启）。
+- 备份/恢复：Classic 布局页新增原生“备份…/恢复…”（复制 launch 数据目录，恢复后自动重启）。
 - 独立 Classic 设置窗口已验证可打开（层 26，684×465，6 个分区）。
 
 待继续：自由布局的任意坐标摆放、搜索/页面像素级校准、文件夹面板与设置窗口的视觉微调、跨 Space/锁屏场景回归。
@@ -460,7 +460,7 @@ open /tmp/launchnext-dd/Build/Products/Debug/LaunchNext.app
 ### 2026-11-03 最终自测补充
 
 - 修复打开时窗口不聚焦/被系统缩成 90% 的问题：显示时切换为 `.regular` 激活策略并激活应用，
-  隐藏时切回 `.accessory`。现在启动后 LaunchNext 会成为前台全屏窗口。
+  隐藏时切回 `.accessory`。现在启动后 launch 会成为前台全屏窗口。
 - 修复背景纯灰：当背景控制器没有图时，直接读取当前桌面壁纸并模糊渲染。
 - 搜索框改为深色玻璃胶囊、白色文字/图标，贴近 Buho 的顶部搜索条。
 - 设置窗口改为无标题栏 684×465 圆角面板（与 Buho 的独立设置窗口一致）。

@@ -209,7 +209,7 @@ with no delayed 0.1/0.5-second second move. Predictions include explicit empty
 placeholders and the page offset after page removal. An unrelated publication of
 the old order cannot redirect the preview back to its source cell.
 
-This algorithm is covered by `LaunchNextTests/GridReorderPlanTests.swift`.
+This algorithm is covered by `launchTests/GridReorderPlanTests.swift`.
 
 ### Previews, animation and lifecycle
 
@@ -292,7 +292,7 @@ overlay behaviour/lifecycle checks, all 14 localization entries, and visual
 inspection of normal, half-page and scaled folder-drag screenshots from the
 synthetic window. The drag source is empty while the dragged folder's clear
 backplate and preview move together. The probe uses the production overlay but
-not the complete LaunchNext event/input stack.
+not the complete launch event/input stack.
 
 ---
 

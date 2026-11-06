@@ -19,7 +19,7 @@ struct FolderMergeIntegration {
         app.setActivationPolicy(.accessory)
         let window = NSWindow(contentRect: CGRect(x: 150, y: 200, width: 780, height: 310),
                               styleMask: [.titled], backing: .buffered, defer: false)
-        window.title = "LaunchNext · production grid merge check"
+        window.title = "launch · production grid merge check"
         let grid = CAGridView(frame: CGRect(x: 0, y: 0, width: 780, height: 310))
         grid.columns = 3; grid.rows = 1; grid.iconSize = 120
         grid.contentInsets = NSEdgeInsets(top: 40, left: 30, bottom: 30, right: 30)
@@ -72,7 +72,7 @@ struct FolderMergeIntegration {
                     config.minimumFrameInterval = CMTime(value: 1, timescale: 60)
                     let capture = SCStream(filter: SCContentFilter(desktopIndependentWindow: own), configuration: config, delegate: nil)
                     let recording = SCRecordingOutputConfiguration()
-                    recording.outputURL = URL(fileURLWithPath: "/tmp/launchnext-merge-integration.mp4")
+                    recording.outputURL = URL(fileURLWithPath: "/tmp/launch-merge-integration.mp4")
                     try? FileManager.default.removeItem(at: recording.outputURL)
                     try capture.addRecordingOutput(SCRecordingOutput(configuration: recording, delegate: observer))
                     try await capture.startCapture()
@@ -262,7 +262,7 @@ struct FolderMergeIntegration {
             if let stream {
                 try? await stream.stopCapture()
                 try? await Task.sleep(for: .milliseconds(500))
-                print("/tmp/launchnext-merge-integration.mp4")
+                print("/tmp/launch-merge-integration.mp4")
             }
             withExtendedLifetime(observer) {}
             app.terminate(nil)
@@ -305,7 +305,7 @@ struct FolderMergeIntegration {
     }
 
     @MainActor static func checkPreferenceMigration() {
-        let suite = "LaunchNext.GuardrailProbe.\(UUID().uuidString)"
+        let suite = "launch.GuardrailProbe.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         precondition(AppStore.loadFolderLiquidGlassEnabled(from: defaults))

@@ -1,15 +1,15 @@
-# LaunchNext
+# launch
 
 **言語**: [English](../README.md) | [简体中文](README.zh.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Français](README.fr.md) | [Español](README.es.md) | [Deutsch](README.de.md) | [Русский](README.ru.md) | [हिन्दी](README.hi.md) | [Tiếng Việt](README.vi.md) | [Italiano](README.it.md) | [Čeština](README.cs.md) | [Polski](README.pl.md)
 
 ## 📥 ダウンロード
 
-**[こちらからダウンロード](https://github.com/RoversX/LaunchNext/releases/latest)** - 最新版を入手
+**[こちらからダウンロード](https://github.com/yongzhuanghuo/launch/releases/latest)** - 最新版を入手
 
-🌐 **公式サイト**: [closex.org/launchnext](https://closex.org/launchnext/)  
-📚 **ドキュメント**: [docs.closex.org/launchnext](https://docs.closex.org/launchnext/)
+🌐 **公式サイト**: [closex.org/launch](https://closex.org/launch/)  
+📚 **ドキュメント**: [docs.closex.org/launch](https://docs.closex.org/launch/)
 
-⭐ [LaunchNext](https://github.com/RoversX/LaunchNext) と元プロジェクト [LaunchNow](https://github.com/ggkevinnnn/LaunchNow) へのスターをお願いします！
+⭐ [launch](https://github.com/yongzhuanghuo/launch) と元プロジェクト [LaunchNow](https://github.com/ggkevinnnn/LaunchNow) へのスターをお願いします！
 
 🖥️ 新しく作ったオープンソースのエージェント向けターミナルマルチプレクサ [ThinkTerm](https://github.com/RoversX/ThinkTerm) もぜひ試してみてください。半年以上かけて作りました 🥺
 
@@ -18,19 +18,19 @@
 | ![](../public/banner.webp) | ![](../public/setting1.webp) |
 | ![](../public/setting2.webp) | ![](../public/setting3.webp) |
 
-macOS Tahoe は Launchpad を削除しましたが、新しいインターフェースは使いにくく、Bio GPU を十分に活用できません。Apple よ、せめて元に戻すオプションを提供してください。それまでは、LaunchNext があります。
+macOS Tahoe は Launchpad を削除しましたが、新しいインターフェースは使いにくく、Bio GPU を十分に活用できません。Apple よ、せめて元に戻すオプションを提供してください。それまでは、launch があります。
 
 *[LaunchNow](https://github.com/ggkevinnnn/LaunchNow)（ggkevinnnn）をベースに開発しました。原プロジェクトに心から感謝します！❤️*
 
-*LaunchNow は GPL 3 ライセンスを選択しており、LaunchNext も同じライセンス条件に従います。*
+*LaunchNow は GPL 3 ライセンスを選択しており、launch も同じライセンス条件に従います。*
 
 ⚠️ **macOS がアプリをブロックする場合、ターミナルで実行してください：**
 ```bash
-sudo xattr -r -d com.apple.quarantine /Applications/LaunchNext.app
+sudo xattr -r -d com.apple.quarantine /Applications/launch.app
 ```
 **理由**：私は Apple の開発者証明書（年間 $99）を購入する余裕がないため、macOS は未署名アプリをブロックします。このコマンドは隔離フラグを削除してアプリを実行可能にします。**信頼できるアプリにのみ使用してください。**
 
-## LaunchNext が提供するもの
+## launch が提供するもの
 
 - ✅ **旧システム Launchpad からのワンクリックインポート** - ネイティブ Launchpad SQLite データベースを直接読み取り、フォルダ、アプリ位置、レイアウトを復元
 - ✅ **手動でのアプリ整理** - アプリ移動、フォルダ作成、好みのレイアウト維持が可能
@@ -58,12 +58,12 @@ sudo xattr -r -d com.apple.quarantine /Applications/LaunchNext.app
 アプリデータは以下に保存されます：
 
 ```text
-~/Library/Application Support/LaunchNext/Data.store
+~/Library/Application Support/launch/Data.store
 ```
 
 ## ネイティブ Launchpad 統合
 
-LaunchNext はシステム Launchpad データベースを直接読み取れます：
+launch はシステム Launchpad データベースを直接読み取れます：
 
 ```bash
 /private$(getconf DARWIN_USER_DIR)com.apple.dock.launchpad/db/db
@@ -81,13 +81,13 @@ LaunchNext はシステム Launchpad データベースを直接読み取れま�
 
 1. **リポジトリをクローン**
    ```bash
-   git clone https://github.com/RoversX/LaunchNext.git
-   cd LaunchNext
+   git clone https://github.com/yongzhuanghuo/launch.git
+   cd launch
    ```
 
 2. **Xcode で開く**
    ```bash
-   open LaunchNext.xcodeproj
+   open launch.xcodeproj
    ```
 
 3. **ビルドして実行**
@@ -99,19 +99,19 @@ LaunchNext はシステム Launchpad データベースを直接読み取れま�
 
 **通常ビルド：**
 ```bash
-xcodebuild -project LaunchNext.xcodeproj -scheme LaunchNext -configuration Release
+xcodebuild -project launch.xcodeproj -scheme launch -configuration Release
 ```
 
 **ユニバーサルバイナリ（Intel + Apple Silicon）：**
 ```bash
-xcodebuild -project LaunchNext.xcodeproj -scheme LaunchNext -configuration Release ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO clean build
+xcodebuild -project launch.xcodeproj -scheme launch -configuration Release ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO clean build
 ```
 
 ## 使い方
 
 ### はじめに
 
-1. LaunchNext は初回起動時にインストール済みアプリをスキャンします
+1. launch は初回起動時にインストール済みアプリをスキャンします
 2. 旧 Launchpad レイアウトを取り込むか、新規レイアウトから開始します
 3. 検索、キーボード操作、マウスドラッグ、フォルダでアプリを整理します
 4. 設定でエンジン、レイアウトモード、起動方法、自動化を構成します
@@ -132,16 +132,16 @@ xcodebuild -project LaunchNext.xcodeproj -scheme LaunchNext -configuration Relea
 
 ### 起動と入力
 
-- **Hot Corner 対応** - 設定可能な画面コーナーから LaunchNext を起動
+- **Hot Corner 対応** - 設定可能な画面コーナーから launch を起動
 - **実験的ネイティブジェスチャー対応** - 4 本指 pinch / tap アクション
-- **グローバルショートカット対応** - どこからでも LaunchNext を開ける
+- **グローバルショートカット対応** - どこからでも launch を開ける
 - **Dock へのドラッグ** - Core Animation エンジンで macOS Dock に直接アプリを渡せる
 
 ### 自動化とパワーユーザー向けワークフロー
 
 - **CLI / TUI 対応** - レイアウト確認、アプリ検索、フォルダ作成、アプリ移動、自動化が可能
 - **agent 向けワークフロー** - ターミナル型 AI agent や shell 自動化と相性が良い
-- **設定からコマンドラインを有効化** - 管理対象 `launchnext` コマンドの追加 / 削除が可能
+- **設定からコマンドラインを有効化** - 管理対象 `launch` コマンドの追加 / 削除が可能
 
 ### 更新体験
 
@@ -158,7 +158,7 @@ xcodebuild -project LaunchNext.xcodeproj -scheme LaunchNext -configuration Relea
 ### アクセシビリティとナビゲーション
 
 - **音声フィードバック対応** - ナビゲーション時にアプリやフォルダ名を読み上げ
-- **コントローラ対応** - ゲームコントローラで LaunchNext とフォルダを操作
+- **コントローラ対応** - ゲームコントローラで launch とフォルダを操作
 - **キーボード中心の操作** - マウスなしでも高速検索と移動が可能
 
 ## パフォーマンスと安定性
@@ -179,7 +179,7 @@ A: macOS 26 以降であることを確認し、必要なら quarantine を外�
 A: `Next Engine + Core Animation` を推奨します。旧互換パスが必要な場合のみ `Legacy Engine` を使ってください。
 
 **Q: CLI コマンドがまだ使えないのはなぜ？**  
-A: まず設定でコマンドラインインターフェースを有効にしてください。LaunchNext は管理対象の `launchnext` shim を追加 / 削除できます。
+A: まず設定でコマンドラインインターフェースを有効にしてください。launch は管理対象の `launch` shim を追加 / 削除できます。
 
 ## コントリビューション
 
@@ -201,13 +201,13 @@ A: まず設定でコマンドラインインターフェースを有効にし�
 
 ## アプリ管理の未来
 
-Apple がカスタマイズ可能なランチャーから離れていく中で、LaunchNext は現代 macOS 上でも手動整理、ユーザー制御、高速なアプリアクセスを維持しようとしています。
+Apple がカスタマイズ可能なランチャーから離れていく中で、launch は現代 macOS 上でも手動整理、ユーザー制御、高速なアプリアクセスを維持しようとしています。
 
-**LaunchNext** は単なる Launchpad の代替ではなく、ワークフローの後退に対する現実的な回答です。
+**launch** は単なる Launchpad の代替ではなく、ワークフローの後退に対する現実的な回答です。
 
 ---
 
-**LaunchNext** - アプリランチャーの主導権を取り戻す 🚀
+**launch** - アプリランチャーの主導権を取り戻す 🚀
 
 *カスタマイズを妥協したくない macOS ユーザーのために。*
 
@@ -221,4 +221,4 @@ Apple がカスタマイズ可能なランチャーから離れていく中で�
 
 - 実験的ジェスチャー機能は [OpenMultitouchSupport](https://github.com/Kyome22/OpenMultitouchSupport) と [KrishKrosh](https://github.com/KrishKrosh/OpenMultitouchSupport) の fork をベースにしています。❤️
 
-![GitHub downloads](https://img.shields.io/github/downloads/RoversX/LaunchNext/total)
+![GitHub downloads](https://img.shields.io/github/downloads/yongzhuanghuo/launch/total)

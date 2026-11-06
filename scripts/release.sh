@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-PROJECT="LaunchNext.xcodeproj"
-SCHEME="LaunchNext"
+PROJECT="launch.xcodeproj"
+SCHEME="launch"
 CONFIGURATION="Release"
 
 cd "${ROOT_DIR}"
@@ -26,7 +26,7 @@ BUILT_PRODUCTS_DIR="$(xcodebuild \
   | awk -F ' = ' '/^[[:space:]]*BUILT_PRODUCTS_DIR = / { print $2 }' \
   | tail -n 1)"
 
-APP_PATH="${BUILT_PRODUCTS_DIR}/LaunchNext.app"
+APP_PATH="${BUILT_PRODUCTS_DIR}/launch.app"
 BUILD_DIR="$(cd "${BUILT_PRODUCTS_DIR}/../.." && pwd)"
 RELEASE_DIR="${BUILD_DIR}/dist"
 
@@ -44,7 +44,7 @@ if [[ -z "${VERSION}" ]]; then
   exit 1
 fi
 
-ZIP_NAME="LaunchNext${VERSION}.zip"
+ZIP_NAME="launch-${VERSION}.zip"
 ZIP_PATH="${RELEASE_DIR}/${ZIP_NAME}"
 CHECKSUMS_PATH="${RELEASE_DIR}/checksums.txt"
 

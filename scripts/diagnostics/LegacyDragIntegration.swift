@@ -49,7 +49,7 @@ import SwiftData
         store.items = apps.map { .app($0) }
         let window = BorderlessWindow(contentRect: CGRect(x: 100, y: 100, width: 1000, height: 700),
                                       styleMask: [.borderless, .fullSizeContentView], backing: .buffered, defer: false)
-        window.title = "LaunchNext Legacy drag verification"
+        window.title = "launch Legacy drag verification"
         window.contentView = NSHostingView(rootView: LaunchpadView(appStore: store))
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

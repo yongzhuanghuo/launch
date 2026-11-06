@@ -8,9 +8,9 @@ import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[2]
-input_source = (root / 'LaunchNext/CAGridView+Input.swift').read_text()
-layout = (root / 'LaunchNext/CAGridView+Layout.swift').read_text()
-glass = (root / 'LaunchNext/CAGridView+FolderGlass.swift').read_text()
+input_source = (root / 'launch/CAGridView+Input.swift').read_text()
+layout = (root / 'launch/CAGridView+Layout.swift').read_text()
+glass = (root / 'launch/CAGridView+FolderGlass.swift').read_text()
 
 
 def section(text, start, end):
@@ -113,11 +113,11 @@ checks = '''
  }
 }
 '''
-with tempfile.TemporaryDirectory(prefix='launchnext-visual-policy-') as folder:
+with tempfile.TemporaryDirectory(prefix='launch-visual-policy-') as folder:
     path = Path(folder)
     source = path / 'Probe.swift'
     source.write_text(fixtures + scale + animate + '\n}\n' + content + checks)
     binary = path / 'probe'
     subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-module-cache-path',
-                    '/tmp/launchnext-glass-module-cache', str(source), '-o', str(binary)], check=True)
+                    '/tmp/launch-glass-module-cache', str(source), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True)

@@ -7,17 +7,17 @@ import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[2]
-reveal_check = os.environ.get('LAUNCHNEXT_LAYOUT_REVEAL_CHECK_ONLY') == '1'
-with tempfile.TemporaryDirectory(prefix='launchnext-folder-presentation-') as temporary:
+reveal_check = os.environ.get('LAUNCH_LAYOUT_REVEAL_CHECK_ONLY') == '1'
+with tempfile.TemporaryDirectory(prefix='launch-folder-presentation-') as temporary:
     work = Path(temporary)
-    for name in ['LaunchNext', 'LaunchNext.xcodeproj']:
+    for name in ['launch', 'launch.xcodeproj']:
         shutil.copytree(root / name, work / name)
     for item in root.iterdir():
-        if item.name.startswith('.') or item.name in ['LaunchNext', 'LaunchNext.xcodeproj', 'build', 'Archive']:
+        if item.name.startswith('.') or item.name in ['launch', 'launch.xcodeproj', 'build', 'Archive']:
             continue
         (work / item.name).symlink_to(item, target_is_directory=item.is_dir())
 
-    entry = work / 'LaunchNext/LaunchpadApp.swift'
+    entry = work / 'launch/LaunchpadApp.swift'
     source = entry.read_text()
     marker = '@main\nstruct LaunchpadApp'
     if source.count(marker) != 1:
@@ -27,7 +27,7 @@ with tempfile.TemporaryDirectory(prefix='launchnext-folder-presentation-') as te
     # Keep production observable properties and methods, but skip scanning,
     # layout persistence, input devices and startup observers. The isolated
     # bundle identifier also keeps property defaults out of the user's domain.
-    store = work / 'LaunchNext/AppStore.swift'
+    store = work / 'launch/AppStore.swift'
     source = store.read_text()
     start = source.index('    init() {', source.index('final class AppStore'))
     end = source.index('{', start) + 1
@@ -39,7 +39,7 @@ with tempfile.TemporaryDirectory(prefix='launchnext-folder-presentation-') as te
             depth -= 1
         end += 1
     fixture = '''    init() {
-        customIconFileURL = URL(fileURLWithPath: "/tmp/launchnext-opening-fixture-icon.png")
+        customIconFileURL = URL(fileURLWithPath: "/tmp/launch-opening-fixture-icon.png")
         defaultAppIcon = NSImage(size: NSSize(width: 32, height: 32))
         currentAppIcon = defaultAppIcon
         hasCustomAppIcon = false
@@ -59,7 +59,7 @@ with tempfile.TemporaryDirectory(prefix='launchnext-folder-presentation-') as te
     }"""
     store.write_text(source[:start] + fixture + source[end:])
     if reveal_check:
-        view = work / 'LaunchNext/LaunchpadView.swift'
+        view = work / 'launch/LaunchpadView.swift'
         text = view.read_text()
         begin = text.index('    private func refreshBackgroundImage(')
         finish = text.index('    private func setupWindowShownObserver()', begin)
@@ -69,7 +69,7 @@ with tempfile.TemporaryDirectory(prefix='launchnext-folder-presentation-') as te
 
         # Delay image delivery even on cache hits, to reproduce a cold restored
         # grid without replacing the real renderer or image-loading implementation.
-        layout = work / 'LaunchNext/CAGridView+Layout.swift'
+        layout = work / 'launch/CAGridView+Layout.swift'
         text = layout.read_text()
         marker = '    func setIcon(for layer: CALayer, item: LaunchpadItem) {'
         if text.count(marker) != 1:
@@ -87,7 +87,7 @@ extension CAGridView {
 ''')
 
 
-    overlay = work / 'LaunchNext/FolderGlassOverlay.swift'
+    overlay = work / 'launch/FolderGlassOverlay.swift'
     overlay.write_text(overlay.read_text() + """
 extension FolderGlassOverlay {
     var probeHandoffGlass: NSView? {
@@ -104,7 +104,7 @@ extension FolderGlassOverlay {
 """)
 
     # Observe private state only in the temporary target; no shipped test hooks.
-    host = work / 'LaunchNext/CAFolderPresentation.swift'
+    host = work / 'launch/CAFolderPresentation.swift'
     host.write_text(host.read_text() + '''
 extension CAFolderPresentationHost {
     var probeTitleShadow: BackgroundLabelContrast.Shadow? { hosting?.rootView.labelShadow }
@@ -165,7 +165,7 @@ extension CAFolderPresentationHost {
 
 }
 ''')
-    grid = work / 'LaunchNext/CAFolderGridView.swift'
+    grid = work / 'launch/CAFolderGridView.swift'
     grid.write_text(grid.read_text() + '''
 extension CAFolderGridView {
     func probeCheckReorderReuse() {
@@ -298,16 +298,16 @@ extension CAFolderGridView {
 }
 """)
     entry_name = 'LayoutRevealIntegration.swift' if reveal_check else 'FolderPresentationIntegration.swift'
-    shutil.copy2(root / 'scripts/diagnostics' / entry_name, work / 'LaunchNext/')
+    shutil.copy2(root / 'scripts/diagnostics' / entry_name, work / 'launch/')
     derived = work / 'DerivedData'
-    log = Path('/tmp/launchnext-folder-presentation-build.log')
+    log = Path('/tmp/launch-folder-presentation-build.log')
     with log.open('w') as output:
-        subprocess.run(['xcodebuild', 'build', '-project', str(work / 'LaunchNext.xcodeproj'),
-                        '-scheme', 'LaunchNext', '-configuration', 'Debug',
+        subprocess.run(['xcodebuild', 'build', '-project', str(work / 'launch.xcodeproj'),
+                        '-scheme', 'launch', '-configuration', 'Debug',
                         '-derivedDataPath', str(derived), '-destination', 'platform=macOS',
                         'CODE_SIGNING_ALLOWED=NO',
-                        'PRODUCT_BUNDLE_IDENTIFIER=local.launchnext.folderpresentationprobe'],
+                        'PRODUCT_BUNDLE_IDENTIFIER=local.launch.folderpresentationprobe'],
                        check=True, stdout=output, stderr=subprocess.STDOUT)
-    binary = derived / 'Build/Products/Debug/LaunchNext.app/Contents/MacOS/LaunchNext'
+    binary = derived / 'Build/Products/Debug/launch.app/Contents/MacOS/launch'
     subprocess.run([str(binary)], check=True, timeout=60, cwd=work,
                    env=dict(os.environ, LLVM_PROFILE_FILE=str(work / 'presentation-%p.profraw')))

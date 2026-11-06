@@ -1,4 +1,4 @@
-// Compile with LaunchNext/FolderGlassOverlay.swift; see scripts/diagnostics/README.md.
+// Compile with launch/FolderGlassOverlay.swift; see scripts/diagnostics/README.md.
 import AppKit
 import QuartzCore
 import Darwin
@@ -29,7 +29,7 @@ final class GlassProbe: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         window = NSWindow(contentRect: canvas.bounds, styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        window.title = "LaunchNext folder glass probe · \(output) · \(count) folders"
+        window.title = "launch folder glass probe · \(output) · \(count) folders"
         window.isReleasedWhenClosed = false
         window.contentView = canvas
         canvas.wantsLayer = true
@@ -215,7 +215,7 @@ final class GlassProbe: NSObject, NSApplicationDelegate {
                     configuration.height = Int(own.frame.height * 2)
                     configuration.showsCursor = false
                     let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
-                    let url = URL(fileURLWithPath: "/tmp/launchnext-folder-\(output)\(args.contains("--start-late") ? "-late" : "")\(args.contains("--shift") ? "-shift" : "")\(args.contains("--drag") ? "-drag" : "")\(args.contains("--drop") ? "-drop" : "")\(args.contains("--drag-start") ? "-start" : "")\(args.contains("--legacy-start") ? "-before" : "")\(args.contains("--late-preview") ? "-late-preview" : "").png")
+                    let url = URL(fileURLWithPath: "/tmp/launch-folder-\(output)\(args.contains("--start-late") ? "-late" : "")\(args.contains("--shift") ? "-shift" : "")\(args.contains("--drag") ? "-drag" : "")\(args.contains("--drop") ? "-drop" : "")\(args.contains("--drag-start") ? "-start" : "")\(args.contains("--legacy-start") ? "-before" : "")\(args.contains("--late-preview") ? "-late-preview" : "").png")
                     let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)!
                     CGImageDestinationAddImage(destination, image, nil)
                     precondition(CGImageDestinationFinalize(destination))

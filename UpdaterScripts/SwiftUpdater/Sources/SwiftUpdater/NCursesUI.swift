@@ -7,7 +7,7 @@ final class CursesSession {
     private var statusLine: String?
     private var footer: String?
     private var progress: ProgressState?
-    var title: String = "LaunchNext Updater"
+    var title: String = "launch Updater"
 
     private struct ProgressState {
         var label: String

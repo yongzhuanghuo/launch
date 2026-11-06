@@ -1,15 +1,15 @@
-# LaunchNext
+# launch
 
 **언어**: [English](../README.md) | [简体中文](README.zh.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Français](README.fr.md) | [Español](README.es.md) | [Deutsch](README.de.md) | [Русский](README.ru.md) | [हिन्दी](README.hi.md) | [Tiếng Việt](README.vi.md) | [Italiano](README.it.md) | [Čeština](README.cs.md) | [Polski](README.pl.md)
 
 ## 📥 다운로드
 
-**[눌러서 다운받기](https://github.com/RoversX/LaunchNext/releases/latest)** - 여기서 최신버전을 받을 수 있어요
+**[눌러서 다운받기](https://github.com/yongzhuanghuo/launch/releases/latest)** - 여기서 최신버전을 받을 수 있어요
 
-🌐 **웹사이트**: [closex.org/launchnext](https://closex.org/launchnext/)  
-📚 **문서**: [docs.closex.org/launchnext](https://docs.closex.org/launchnext/)
+🌐 **웹사이트**: [closex.org/launch](https://closex.org/launch/)  
+📚 **문서**: [docs.closex.org/launch](https://docs.closex.org/launch/)
 
-⭐ [LaunchNext](https://github.com/RoversX/LaunchNext)와 원본 프로젝트 [LaunchNow](https://github.com/ggkevinnnn/LaunchNow)에 star를 달아주세요!
+⭐ [launch](https://github.com/yongzhuanghuo/launch)와 원본 프로젝트 [LaunchNow](https://github.com/ggkevinnnn/LaunchNow)에 star를 달아주세요!
 
 🖥️ 제가 새로 만든 오픈소스 에이전트 터미널 멀티플렉서 [ThinkTerm](https://github.com/RoversX/ThinkTerm)도 꼭 써 봐 주세요. 반년 넘게 공들였어요 🥺
 
@@ -19,19 +19,19 @@
 | ![](../public/setting2.webp) | ![](../public/setting3.webp) |
 
 macOS Tahoe는 런치패드가 사라졌고, 새로운 인터페이스는 비직관적이며 Bio GPU를 제대로 활용하지 못해요.
-Apple이 런치패드를 다시 제공하는날이 올때, 그때까지 LaunchNext를 사용해보세요.
+Apple이 런치패드를 다시 제공하는날이 올때, 그때까지 launch를 사용해보세요.
 
 *[LaunchNow](https://github.com/ggkevinnnn/LaunchNow) (ggkevinnnn 제작)을 기반으로 개발되었어요. 원본 프로젝트에 진심으로 감사드려요!❤️*
 
-*LaunchNow는 GPL 3 라이선스를 선택했습니다. LaunchNext도 동일한 라이선스 조건을 따릅니다.*
+*LaunchNow는 GPL 3 라이선스를 선택했습니다. launch도 동일한 라이선스 조건을 따릅니다.*
 
 ⚠️ **macOS가 앱을 차단하면 터미널에서 실행하세요:**
 ```bash
-sudo xattr -r -d com.apple.quarantine /Applications/LaunchNext.app
+sudo xattr -r -d com.apple.quarantine /Applications/launch.app
 ```
 **왜요?**: 저는 Apple의 개발자 인증서($99/년)를 살 여유가 없어서 macOS가 서명되지 않은 앱을 차단해요. 이 명령어는 격리 플래그를 제거해서 앱이 실행되도록 해요 **반드시 신뢰할 수 있는 앱에만 사용하세요.**
 
-## LaunchNext가 제공하는 것 😍
+## launch가 제공하는 것 😍
 
 - ✅ **기존 시스템 Launchpad 원클릭 가져오기** - 네이티브 Launchpad SQLite 데이터베이스를 직접 읽어 폴더, 앱 위치, 레이아웃을 복원해요
 - ✅ **수동 앱 정리** - 앱 이동, 폴더 생성, 원하는 레이아웃 유지가 가능해요
@@ -59,12 +59,12 @@ sudo xattr -r -d com.apple.quarantine /Applications/LaunchNext.app
 앱 데이터는 다음 위치에 저장돼요:
 
 ```text
-~/Library/Application Support/LaunchNext/Data.store
+~/Library/Application Support/launch/Data.store
 ```
 
 ## 네이티브 Launchpad 통합
 
-LaunchNext는 시스템 Launchpad 데이터베이스를 직접 읽을 수 있어요:
+launch는 시스템 Launchpad 데이터베이스를 직접 읽을 수 있어요:
 
 ```bash
 /private$(getconf DARWIN_USER_DIR)com.apple.dock.launchpad/db/db
@@ -82,13 +82,13 @@ LaunchNext는 시스템 Launchpad 데이터베이스를 직접 읽을 수 있어
 
 1. **저장소 복제**
    ```bash
-   git clone https://github.com/RoversX/LaunchNext.git
-   cd LaunchNext
+   git clone https://github.com/yongzhuanghuo/launch.git
+   cd launch
    ```
 
 2. **Xcode에서 열기**
    ```bash
-   open LaunchNext.xcodeproj
+   open launch.xcodeproj
    ```
 
 3. **빌드 및 실행**
@@ -100,19 +100,19 @@ LaunchNext는 시스템 Launchpad 데이터베이스를 직접 읽을 수 있어
 
 **일반 빌드:**
 ```bash
-xcodebuild -project LaunchNext.xcodeproj -scheme LaunchNext -configuration Release
+xcodebuild -project launch.xcodeproj -scheme launch -configuration Release
 ```
 
 **유니버설 바이너리 빌드 (Intel + Apple Silicon):**
 ```bash
-xcodebuild -project LaunchNext.xcodeproj -scheme LaunchNext -configuration Release ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO clean build
+xcodebuild -project launch.xcodeproj -scheme launch -configuration Release ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO clean build
 ```
 
 ## 사용법
 
 ### 시작하기
 
-1. LaunchNext는 첫 실행 시 설치된 앱을 스캔해요
+1. launch는 첫 실행 시 설치된 앱을 스캔해요
 2. 기존 Launchpad 레이아웃을 가져오거나 빈 레이아웃에서 시작해요
 3. 검색, 키보드 탐색, 마우스 드래그, 폴더로 앱을 정리해요
 4. 설정에서 엔진, 레이아웃 모드, 활성화 방식, 자동화를 구성해요
@@ -133,16 +133,16 @@ xcodebuild -project LaunchNext.xcodeproj -scheme LaunchNext -configuration Relea
 
 ### 활성화와 입력
 
-- **Hot Corner 지원** - 설정 가능한 화면 모서리에서 LaunchNext 열기
+- **Hot Corner 지원** - 설정 가능한 화면 모서리에서 launch 열기
 - **실험적 네이티브 제스처 지원** - 4손가락 pinch / tap 동작
-- **전역 단축키 지원** - 어디서든 LaunchNext 열기
+- **전역 단축키 지원** - 어디서든 launch 열기
 - **Dock으로 드래그** - Core Animation 엔진에서 macOS Dock에 직접 앱 넘기기
 
 ### 자동화와 파워유저 워크플로우
 
 - **CLI / TUI 지원** - 레이아웃 확인, 앱 검색, 폴더 생성, 앱 이동, 자동화 가능
 - **agent 친화적 워크플로우** - 터미널 기반 AI agent와 shell 자동화에 잘 맞아요
-- **설정에서 명령줄 활성화** - 관리되는 `launchnext` 명령을 설치하거나 제거 가능
+- **설정에서 명령줄 활성화** - 관리되는 `launch` 명령을 설치하거나 제거 가능
 
 ### 업데이트 경험
 
@@ -159,7 +159,7 @@ xcodebuild -project LaunchNext.xcodeproj -scheme LaunchNext -configuration Relea
 ### 접근성과 탐색
 
 - **음성 피드백 지원** - 탐색 중 앱과 폴더 이름을 읽어줘요
-- **컨트롤러 지원** - 게임 컨트롤러로 LaunchNext와 폴더를 조작 가능
+- **컨트롤러 지원** - 게임 컨트롤러로 launch와 폴더를 조작 가능
 - **키보드 중심 상호작용** - 마우스 없이도 빠른 검색과 이동 가능
 
 ## 성능과 안정성
@@ -180,7 +180,7 @@ A: macOS 26 이상인지 확인하고, 필요하면 quarantine을 제거한 뒤,
 A: `Next Engine + Core Animation` 을 권장해요. 오래된 호환성 경로가 꼭 필요할 때만 `Legacy Engine` 을 사용하세요.
 
 **Q: CLI 명령이 아직 없어요. 왜 그런가요?**  
-A: 먼저 설정에서 명령줄 인터페이스를 활성화하세요. LaunchNext가 관리되는 `launchnext` shim을 설치하고 제거할 수 있어요.
+A: 먼저 설정에서 명령줄 인터페이스를 활성화하세요. launch가 관리되는 `launch` shim을 설치하고 제거할 수 있어요.
 
 ## 기여
 
@@ -202,13 +202,13 @@ A: 먼저 설정에서 명령줄 인터페이스를 활성화하세요. LaunchNe
 
 ## 앱 관리의 미래
 
-Apple이 커스텀 런처에서 멀어지는 동안, LaunchNext는 현대 macOS에서도 수동 정리, 사용자 제어, 빠른 접근을 유지하려고 해요.
+Apple이 커스텀 런처에서 멀어지는 동안, launch는 현대 macOS에서도 수동 정리, 사용자 제어, 빠른 접근을 유지하려고 해요.
 
-**LaunchNext**는 단순한 Launchpad 대체제가 아니라, 퇴행한 워크플로우에 대한 실용적인 대응이에요.
+**launch**는 단순한 Launchpad 대체제가 아니라, 퇴행한 워크플로우에 대한 실용적인 대응이에요.
 
 ---
 
-**LaunchNext** - 앱 런처의 주도권을 되찾으세요 🚀
+**launch** - 앱 런처의 주도권을 되찾으세요 🚀
 
 *커스터마이징에 타협따위 안하는 macOS 사용자를 위해.*
 
@@ -222,4 +222,4 @@ Apple이 커스텀 런처에서 멀어지는 동안, LaunchNext는 현대 macOS�
 
 - 실험적 제스처 지원은 [OpenMultitouchSupport](https://github.com/Kyome22/OpenMultitouchSupport) 와 [KrishKrosh](https://github.com/KrishKrosh/OpenMultitouchSupport) 포크를 기반으로 합니다.❤️
 
-![GitHub downloads](https://img.shields.io/github/downloads/RoversX/LaunchNext/total)
+![GitHub downloads](https://img.shields.io/github/downloads/yongzhuanghuo/launch/total)

@@ -2,6 +2,7 @@ import Foundation
 
 struct UpdaterArguments {
     var tag: String?
+    var feedURL: String?
     var assetPattern: String
     var installDirectory: URL?
     var downloadOnly: Bool
@@ -11,7 +12,7 @@ struct UpdaterArguments {
     var resetLanguage: Bool
     var holdWindow: Bool
 
-    static let defaultAssetPattern = "LaunchNext.*\\.zip"
+    static let defaultAssetPattern = "launch.*\\.zip"
 }
 
 enum ArgumentError: Error {
@@ -29,6 +30,7 @@ func parseArguments() throws -> UpdaterArguments {
 
     var result = UpdaterArguments(
         tag: nil,
+        feedURL: nil,
         assetPattern: UpdaterArguments.defaultAssetPattern,
         installDirectory: nil,
         downloadOnly: false,
@@ -44,6 +46,9 @@ func parseArguments() throws -> UpdaterArguments {
         case "--tag":
             guard let value = parser.next() else { throw ArgumentError.invalidValue(token) }
             result.tag = value
+        case "--feed-url":
+            guard let value = parser.next() else { throw ArgumentError.invalidValue(token) }
+            result.feedURL = value
         case "--asset-pattern":
             guard let value = parser.next() else { throw ArgumentError.invalidValue(token) }
             result.assetPattern = value

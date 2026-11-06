@@ -128,7 +128,7 @@ struct DragLandingProbe {
         app.setActivationPolicy(.accessory)
         let window = NSWindow(contentRect: CGRect(x: 120, y: 120, width: 520, height: 380),
                               styleMask: [.titled], backing: .buffered, defer: false)
-        window.title = "LaunchNext · Drag landing checks"
+        window.title = "launch · Drag landing checks"
         let grid = CAGridView(frame: CGRect(x: 0, y: 0, width: 520, height: 380))
         window.contentView = grid
         window.orderFrontRegardless()

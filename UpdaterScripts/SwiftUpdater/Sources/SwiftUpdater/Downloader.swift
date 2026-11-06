@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 struct DownloadResult {
@@ -8,7 +9,13 @@ struct DownloadResult {
 typealias ProgressCallback = (_ completed: Int, _ total: Int?) -> Void
 
 enum Downloader {
-    static func download(from remote: URL, to local: URL, expectedSize: Int?, progress: ProgressCallback?) async throws -> DownloadResult {
+    static func download(
+        from remote: URL,
+        to local: URL,
+        expectedSize: Int?,
+        expectedSha256: String? = nil,
+        progress: ProgressCallback?
+    ) async throws -> DownloadResult {
         var request = URLRequest(url: remote)
         request.httpMethod = "GET"
         let (bytes, response) = try await URLSession.shared.bytes(for: request)
@@ -26,24 +33,37 @@ enum Downloader {
         var total = 0
         let responseExpected = response.expectedContentLength > 0 ? Int(min(response.expectedContentLength, Int64(Int.max))) : nil
         let expected = expectedSize ?? responseExpected
+        var hasher = SHA256()
         var buffer: [UInt8] = []
         buffer.reserveCapacity(131_072)
         var iterator = bytes.makeAsyncIterator()
         while let byte = try await iterator.next() {
             buffer.append(byte)
             if buffer.count >= 131_072 {
-                handle.write(Data(buffer))
+                let chunk = Data(buffer)
+                handle.write(chunk)
+                hasher.update(data: chunk)
                 total += buffer.count
                 progress?(total, expected)
                 buffer.removeAll(keepingCapacity: true)
             }
         }
         if !buffer.isEmpty {
-            handle.write(Data(buffer))
+            let chunk = Data(buffer)
+            handle.write(chunk)
+            hasher.update(data: chunk)
             total += buffer.count
             buffer.removeAll(keepingCapacity: true)
         }
         progress?(total, expected)
+
+        if let expectedSha256, !expectedSha256.isEmpty {
+            let actual = hasher.finalize().map { String(format: "%02x", $0) }.joined()
+            guard actual.lowercased() == expectedSha256.lowercased() else {
+                try? FileManager.default.removeItem(at: local)
+                throw UpdaterError.verification("SHA-256 mismatch")
+            }
+        }
         return DownloadResult(fileURL: local, size: total)
     }
 }
