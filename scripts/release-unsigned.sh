@@ -16,10 +16,26 @@ swift build \
   -c release \
   --arch arm64 \
   --arch x86_64
+
+# SwiftPM 版本不同，universal 产物可能在 .build/out 或 .build/apple。
+UPDATER_SRC=""
+for candidate in \
+  "UpdaterScripts/SwiftUpdater/.build/out/Products/Release/SwiftUpdater" \
+  "UpdaterScripts/SwiftUpdater/.build/apple/Products/Release/SwiftUpdater"; do
+  if [[ -f "$candidate" ]]; then
+    UPDATER_SRC="$candidate"
+    break
+  fi
+done
+if [[ -z "$UPDATER_SRC" ]]; then
+  UPDATER_SRC="$(find UpdaterScripts/SwiftUpdater/.build -path '*/Products/Release/SwiftUpdater' -type f | head -1)"
+fi
+if [[ -z "$UPDATER_SRC" || ! -f "$UPDATER_SRC" ]]; then
+  echo "error: universal SwiftUpdater binary not found" >&2
+  exit 1
+fi
 mkdir -p UpdaterScripts/SwiftUpdater/.build/apple/Products/Release
-cp -f \
-  UpdaterScripts/SwiftUpdater/.build/out/Products/Release/SwiftUpdater \
-  UpdaterScripts/SwiftUpdater/.build/apple/Products/Release/SwiftUpdater
+cp -f "$UPDATER_SRC" UpdaterScripts/SwiftUpdater/.build/apple/Products/Release/SwiftUpdater
 
 echo "Building universal launch.app (unsigned)..."
 rm -rf "$DERIVED_DIR"

@@ -263,13 +263,23 @@ if [[ "${MODE}" == "notarize" ]]; then
     --arch x86_64 \
     --product SwiftUpdater
 
-  # SwiftPM 6 把 universal 产物放在 .build/out/Products/Release；
-  # Xcode 的 Run Script 仍优先读 .build/apple/Products/Release，这里做一次兼容拷贝。
-  MODERN_UPDATER="${ROOT_DIR}/UpdaterScripts/SwiftUpdater/.build/out/Products/Release/SwiftUpdater"
-  LEGACY_UPDATER_DIR="${ROOT_DIR}/UpdaterScripts/SwiftUpdater/.build/apple/Products/Release"
-  if [[ -f "${MODERN_UPDATER}" ]]; then
-    mkdir -p "${LEGACY_UPDATER_DIR}"
-    cp -f "${MODERN_UPDATER}" "${LEGACY_UPDATER_DIR}/SwiftUpdater"
+  # SwiftPM 版本不同，universal 产物可能在 .build/out 或 .build/apple；
+  # Xcode 的 Run Script 优先读 .build/apple/Products/Release，这里做一次兼容拷贝。
+  UPDATER_SRC=""
+  for candidate in \
+    "${ROOT_DIR}/UpdaterScripts/SwiftUpdater/.build/out/Products/Release/SwiftUpdater" \
+    "${ROOT_DIR}/UpdaterScripts/SwiftUpdater/.build/apple/Products/Release/SwiftUpdater"; do
+    if [[ -f "${candidate}" ]]; then
+      UPDATER_SRC="${candidate}"
+      break
+    fi
+  done
+  if [[ -z "${UPDATER_SRC}" ]]; then
+    UPDATER_SRC="$(find "${ROOT_DIR}/UpdaterScripts/SwiftUpdater/.build" -path '*/Products/Release/SwiftUpdater' -type f | head -1)"
+  fi
+  if [[ -n "${UPDATER_SRC}" && -f "${UPDATER_SRC}" ]]; then
+    mkdir -p "${ROOT_DIR}/UpdaterScripts/SwiftUpdater/.build/apple/Products/Release"
+    cp -f "${UPDATER_SRC}" "${ROOT_DIR}/UpdaterScripts/SwiftUpdater/.build/apple/Products/Release/SwiftUpdater"
   fi
 
   echo "Creating the Xcode archive..."
