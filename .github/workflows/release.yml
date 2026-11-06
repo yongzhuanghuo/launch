@@ -63,10 +63,12 @@ jobs:
         run: |
           IMMUTABLE=(-i "$OSS_KEY_ID" -k "$OSS_KEY_SECRET" -e oss-cn-shanghai.aliyuncs.com -f --meta Cache-Control:public,max-age=31536000,immutable)
           LATEST=(-i "$OSS_KEY_ID" -k "$OSS_KEY_SECRET" -e oss-cn-shanghai.aliyuncs.com -f --meta Cache-Control:no-cache)
+          # 版本化留档
           ossutil cp "$ZIP_PATH" "oss://4kdownlebucket/launch/macos/${VERSION}/launch-${VERSION}.zip" "${IMMUTABLE[@]}"
           ossutil cp "$DMG_PATH" "oss://4kdownlebucket/launch/macos/${VERSION}/launch-${VERSION}.dmg" "${IMMUTABLE[@]}"
-          ossutil cp "$ZIP_PATH" "oss://4kdownlebucket/launch/macos/latest/launch.zip" "${LATEST[@]}"
-          ossutil cp "$DMG_PATH" "oss://4kdownlebucket/launch/macos/latest/launch.dmg" "${LATEST[@]}"
+          # 固定下载地址（与 Downie6 一样放在 releases/ 下）
+          ossutil cp "$ZIP_PATH" "oss://4kdownlebucket/releases/launch.zip" "${LATEST[@]}"
+          ossutil cp "$DMG_PATH" "oss://4kdownlebucket/releases/launch.dmg" "${LATEST[@]}"
 
       - name: Publish latest.json and notify API
         env:
@@ -84,8 +86,8 @@ jobs:
           test -n "$RELEASE_TOKEN"
           API_BASE="${API_BASE:-http://8.153.99.239:3000}"
           BASE="https://4kdownlebucket.oss-cn-shanghai.aliyuncs.com"
-          ZIP_URL="${BASE}/launch/macos/${VERSION}/launch-${VERSION}.zip"
-          DMG_URL="${BASE}/launch/macos/${VERSION}/launch-${VERSION}.dmg"
+          ZIP_URL="${BASE}/releases/launch.zip"
+          DMG_URL="${BASE}/releases/launch.dmg"
           CHANGELOG=$(git log -1 --pretty=%s)
           export VERSION BUILD ZIP_SHA ZIP_SIZE DMG_SHA DMG_SIZE ZIP_URL DMG_URL CHANGELOG
           python3 - <<'PY'
@@ -111,7 +113,7 @@ jobs:
           open("/tmp/publish.json", "w", encoding="utf-8").write(json.dumps(manifest, ensure_ascii=False))
           PY
           OSS_ARGS=(-i "$OSS_KEY_ID" -k "$OSS_KEY_SECRET" -e oss-cn-shanghai.aliyuncs.com -f --meta Cache-Control:no-cache)
-          ossutil cp /tmp/latest.json oss://4kdownlebucket/launch/macos/latest.json "${OSS_ARGS[@]}"
+          ossutil cp /tmp/latest.json oss://4kdownlebucket/releases/launch.json "${OSS_ARGS[@]}"
           curl -fsS -X POST "$API_BASE/api/internal/releases/publish" \
             -H "Content-Type: application/json" \
             -H "X-Release-Token: $RELEASE_TOKEN" \
