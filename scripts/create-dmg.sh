@@ -2,7 +2,7 @@
 # 生成与 Downie6 相同结构的安装 DMG：
 #   上方背景标题/图标，左侧安装说明图，右侧 launch.app + Applications 快捷方式。
 #
-# 用法：scripts/create-dmg.sh <launch.app> <output.dmg> [version]
+# 用法：scripts/create-dmg.sh <启动台.app> <output.dmg> [version]
 # 可选素材：
 #   scripts/dmg/background.png     DMG 背景（660x420 左右）
 #   scripts/dmg/install-guide.png  左侧安装说明图
@@ -14,19 +14,21 @@ OUTPUT="${2:-}"
 VERSION="${3:-}"
 
 if [[ -z "$APP_PATH" || ! -d "$APP_PATH" || -z "$OUTPUT" ]]; then
-  echo "usage: $0 <path-to-launch.app> <output.dmg> [version]" >&2
+  echo "usage: $0 <path-to-启动台.app> <output.dmg> [version]" >&2
   exit 2
 fi
 
+APP_NAME="$(basename "$APP_PATH")"
+
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-VOLUME_NAME="${DMG_VOLUME_NAME:-launch}"
+VOLUME_NAME="${DMG_VOLUME_NAME:-启动台}"
 STAGE="$(mktemp -d "${TMPDIR:-/tmp}/launch-dmg.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 
 mkdir -p "$STAGE/.background"
 
 # ditto 保留 .app 内的符号链接和签名信息
-ditto "$APP_PATH" "$STAGE/launch.app"
+ditto "$APP_PATH" "$STAGE/$APP_NAME"
 ln -s /Applications "$STAGE/Applications"
 
 ASSET_DIR="$ROOT_DIR/scripts/dmg"

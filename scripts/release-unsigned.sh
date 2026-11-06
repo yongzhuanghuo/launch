@@ -60,6 +60,11 @@ if [[ ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
+# Dock 按 .app 文件名显示，重命名为中文后 Dock/Finder 才会显示“启动台”。
+APP_PATH="$DERIVED_DIR/Build/Products/Release/启动台.app"
+rm -rf "$APP_PATH"
+mv "$DERIVED_DIR/Build/Products/Release/launch.app" "$APP_PATH"
+
 echo "Ad-hoc signing..."
 codesign --force --deep --sign - "$APP_PATH"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH" || true

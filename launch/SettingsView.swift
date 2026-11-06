@@ -3796,7 +3796,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Label("launch", systemImage: "keyboard")
+                        Label("启动台", systemImage: "keyboard")
                             .font(.headline)
                         Text(appStore.localized(.globalShortcutDescription))
                             .font(.footnote)

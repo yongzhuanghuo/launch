@@ -2,6 +2,7 @@
 import AppKit
 
 let outDir = URL(fileURLWithPath: CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : ".")
+let iconPath = CommandLine.arguments.count > 2 ? CommandLine.arguments[2] : ""
 
 func writePNG(_ image: NSImage, to name: String) {
     guard let tiff = image.tiffRepresentation,
@@ -28,7 +29,7 @@ let background = makeImage(size: NSSize(width: 660, height: 420)) { rect in
     ])!
     gradient.draw(in: rect, angle: -90)
 
-    let title = "launch" as NSString
+    let title = "启动台" as NSString
     let titleAttrs: [NSAttributedString.Key: Any] = [
         .font: NSFont.systemFont(ofSize: 34, weight: .bold),
         .foregroundColor: NSColor.white,
@@ -50,7 +51,9 @@ let background = makeImage(size: NSSize(width: 660, height: 420)) { rect in
         withAttributes: subAttrs
     )
 
-    if let symbol = NSImage(systemSymbolName: "square.grid.3x3.fill", accessibilityDescription: "launch") {
+    if !iconPath.isEmpty, let icon = NSImage(contentsOfFile: iconPath) {
+        icon.draw(in: NSRect(x: (rect.width - 72) / 2, y: rect.height - 188, width: 72, height: 72))
+    } else if let symbol = NSImage(systemSymbolName: "square.grid.3x3.fill", accessibilityDescription: "启动台") {
         let config = NSImage.SymbolConfiguration(pointSize: 52, weight: .semibold)
         let icon = symbol.withSymbolConfiguration(config) ?? symbol
         icon.isTemplate = false
@@ -76,7 +79,7 @@ let guide = makeImage(size: NSSize(width: 300, height: 260)) { rect in
     title.draw(at: NSPoint(x: 24, y: rect.height - 48), withAttributes: titleAttrs)
 
     let lines = [
-        "1. 把 launch 拖到「应用程序」",
+        "1. 把启动台拖到「应用程序」",
         "2. 首次打开如被拦截，右键打开",
         "   或在系统设置中放行",
         "3. 可选 14 天试用，或输入激活码",

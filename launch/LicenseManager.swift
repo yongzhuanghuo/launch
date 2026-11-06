@@ -1,7 +1,6 @@
 import Combine
 import Foundation
 import IOKit
-import Security
 import SwiftUI
 
 // MARK: - 配置
@@ -95,66 +94,25 @@ private enum DeviceIdentity {
     }
 }
 
-// MARK: - 本地存储（Keychain 优先，失败回退 0600 文件）
+// MARK: - 本地存储（0600 文件）
 
 private enum LicenseStore {
-    private static let service = "com.roversx.launch.license"
-    private static let account = "license-state"
-
+    // 未签名/ad-hoc 发布时 Keychain 会按代码签名校验访问权限，
+    // 每次升级都可能弹系统密码框。授权状态不是密码，改用 0600 文件。
     static func load() -> StoredLicenseState? {
-        guard let data = keychainLoad() ?? fileLoad() else { return nil }
+        guard let data = fileLoad() else { return nil }
         return try? JSONDecoder().decode(StoredLicenseState.self, from: data)
     }
 
     static func save(_ state: StoredLicenseState) {
         guard let data = try? JSONEncoder().encode(state) else { return }
-        if !keychainSave(data) {
-            fileSave(data)
-        }
+        fileSave(data)
     }
 
     static func clear() {
-        keychainDelete()
         if let url = fileURL {
             try? FileManager.default.removeItem(at: url)
         }
-    }
-
-    private static func keychainLoad() -> Data? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        guard status == errSecSuccess else { return nil }
-        return result as? Data
-    }
-
-    @discardableResult
-    private static func keychainSave(_ data: Data) -> Bool {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-        SecItemDelete(query as CFDictionary)
-        var attributes = query
-        attributes[kSecValueData as String] = data
-        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        return SecItemAdd(attributes as CFDictionary, nil) == errSecSuccess
-    }
-
-    private static func keychainDelete() {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-        SecItemDelete(query as CFDictionary)
     }
 
     private static var fileURL: URL? {
@@ -311,6 +269,7 @@ final class LicenseManager: ObservableObject {
     private var stored: StoredLicenseState?
     private var hasBootstrapped = false
     private var refreshTask: Task<Void, Never>?
+    private static let dailyTrialReminderKey = "launch.license.lastTrialReminderDay"
 
     private init() {
         stored = LicenseStore.load()
@@ -340,6 +299,12 @@ final class LicenseManager: ObservableObject {
         return nil
     }
 
+    /// 14 天试用一旦开始就不能重新开始；到期后只显示激活入口。
+    var canStartTrial: Bool {
+        guard let end = stored?.trialEnd else { return true }
+        return end > Date().timeIntervalSince1970
+    }
+
     var displayStatus: String {
         switch state {
         case .checking:
@@ -366,6 +331,27 @@ final class LicenseManager: ObservableObject {
             return end > now
         }
         return false
+    }
+
+    /// CLI 进程不会走 bootstrap，直接根据本地缓存给出状态。
+    var cachedDisplayStatus: String {
+        guard let stored else {
+            return LicenseText.t("未授权，请打开启动台开始试用或输入激活码", "Not licensed. Open Launchpad to start a trial or enter an activation code.")
+        }
+        let now = Date().timeIntervalSince1970
+        if stored.kind == "license" {
+            guard now - stored.lastVerified <= LicenseConfig.offlineGraceSeconds else {
+                return LicenseText.t("离线时间过长，请联网校验授权", "Offline for too long. Connect to the internet to verify your license.")
+            }
+            return stored.email.map {
+                LicenseText.t("已授权 · \($0)", "Licensed · \($0)")
+            } ?? LicenseText.t("已授权", "Licensed")
+        }
+        if let end = stored.trialEnd, end > now {
+            let days = max(1, Int(ceil((end - now) / 86400)))
+            return LicenseText.t("试用剩余 \(days) 天", "\(days) days of trial left")
+        }
+        return LicenseText.t("14 天试用已结束，请输入激活码继续使用", "The 14-day trial has ended. Enter an activation code to continue.")
     }
 
     func bootstrap(force: Bool = false) async {
@@ -431,6 +417,12 @@ final class LicenseManager: ObservableObject {
                 let days = max(0, Int(ceil((end - now.timeIntervalSince1970) / 86400)))
                 state = .trial(days: days, end: Date(timeIntervalSince1970: end))
                 startRefreshLoop()
+            } else if stored?.trialEnd != nil {
+                // 本地已有试用记录且已到期：不能重新开始试用，直接锁到激活页。
+                state = .locked(LicenseText.t(
+                    "14 天试用已结束，请输入激活码继续使用",
+                    "The 14-day trial has ended. Enter an activation code to continue."
+                ))
             } else {
                 state = .locked(LicenseText.t(
                     "需要联网开始 \(LicenseConfig.trialDays) 天试用，或输入激活码",
@@ -560,6 +552,7 @@ final class LicenseManager: ObservableObject {
                     ]
                 )
                 try applyTrial(trial, now: Date())
+                presentDailyTrialReminderIfNeeded()
             } catch {
                 if end <= Date() {
                     state = .locked(LicenseText.t("14 天试用已结束，请输入激活码继续使用", "The 14-day trial has ended. Enter an activation code to continue."))
@@ -613,6 +606,7 @@ final class LicenseManager: ObservableObject {
         guard let payload = trial.trial else {
             throw LicenseAPIError.invalidResponse
         }
+        let isFirstTrialRecord = stored?.trialEnd == nil
         let end = Date(timeIntervalSince1970: payload.trial_end / 1000.0)
         let saved = StoredLicenseState(
             kind: "trial",
@@ -622,6 +616,10 @@ final class LicenseManager: ObservableObject {
             lastVerified: now.timeIntervalSince1970,
             lastServerTime: now.timeIntervalSince1970
         )
+        if isFirstTrialRecord {
+            // 开始试用当天已经在授权页展示过剩余天数，不再额外弹一次。
+            markTrialReminderShown(on: now)
+        }
         stored = saved
         LicenseStore.save(saved)
         if trial.can_download == true, end > now {
@@ -658,6 +656,42 @@ final class LicenseManager: ObservableObject {
         }
     }
 
+    /// 试用期内每天首次打开时提醒一次剩余天数。
+    func presentDailyTrialReminderIfNeeded() {
+        guard case let .trial(days, _) = state else { return }
+        let now = Date()
+        guard UserDefaults.standard.string(forKey: Self.dailyTrialReminderKey) != Self.dayString(now) else {
+            return
+        }
+        markTrialReminderShown(on: now)
+
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = LicenseText.t("启动台试用提醒", "Launchpad trial reminder")
+        alert.informativeText = LicenseText.t(
+            "14 天试用还剩 \(days) 天。试用结束后需要输入激活码才能继续使用。",
+            "\(days) days remain in your 14-day trial. An activation code is required when it ends."
+        )
+        alert.addButton(withTitle: LicenseText.t("继续试用", "Continue trial"))
+        alert.addButton(withTitle: LicenseText.t("输入激活码", "Enter activation code"))
+        if alert.runModal() == .alertSecondButtonReturn {
+            LicenseWindowController.shared.show()
+        }
+    }
+
+    private func markTrialReminderShown(on date: Date) {
+        UserDefaults.standard.set(Self.dayString(date), forKey: Self.dailyTrialReminderKey)
+    }
+
+    private static func dayString(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+
     private func startRefreshLoop() {
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
@@ -689,7 +723,7 @@ struct LicenseGateView: View {
                     .interpolation(.high)
                     .frame(width: 84, height: 84)
             }
-            Text("launch")
+            Text("启动台")
                 .font(.system(size: 30, weight: .bold, design: .rounded))
 
             switch manager.state {
@@ -718,7 +752,10 @@ struct LicenseGateView: View {
             guard !didAppear else { return }
             didAppear = true
             email = LicenseManager.shared.storedEmailForUI
-            Task { await manager.bootstrap() }
+            Task {
+                await manager.bootstrap()
+                manager.presentDailyTrialReminderIfNeeded()
+            }
         }
     }
 
@@ -759,17 +796,19 @@ struct LicenseGateView: View {
             HStack(spacing: 12) {
                 Button(LicenseText.t("输入激活码", "Enter activation code")) { showActivation = true }
                     .buttonStyle(.borderedProminent)
-                Button(LicenseText.t("开始 14 天试用", "Start 14-day trial")) {
-                    Task { await manager.startTrial() }
+                if manager.canStartTrial {
+                    Button(LicenseText.t("开始 14 天试用", "Start 14-day trial")) {
+                        Task { await manager.startTrial() }
+                    }
+                    .disabled(manager.isBusy)
                 }
-                .disabled(manager.isBusy)
             }
         }
 
         HStack(spacing: 16) {
             Button(LicenseText.t("找回许可证", "Recover license")) { manager.recoverByEmail() }
                 .buttonStyle(.link)
-            Button(LicenseText.t("退出 launch", "Quit launch")) { NSApp.terminate(nil) }
+            Button(LicenseText.t("退出启动台", "Quit launch")) { NSApp.terminate(nil) }
                 .buttonStyle(.link)
         }
         .font(.caption)
@@ -922,8 +961,10 @@ struct LicenseSettingsView: View {
                             Button(LicenseText.t("输入激活码", "Enter activation code")) {
                                 showActivation = true
                             }
-                            Button(LicenseText.t("开始 14 天试用", "Start 14-day trial")) {
-                                Task { await manager.startTrial() }
+                            if manager.canStartTrial {
+                                Button(LicenseText.t("开始 14 天试用", "Start 14-day trial")) {
+                                    Task { await manager.startTrial() }
+                                }
                             }
                             Button(LicenseText.t("找回许可证", "Recover license")) {
                                 manager.recoverByEmail()
@@ -985,7 +1026,7 @@ final class LicenseWindowController: NSWindowController, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = LicenseText.t("launch 授权", "launch License")
+        window.title = LicenseText.t("启动台 授权", "launch License")
         window.isReleasedWhenClosed = false
         window.center()
         window.contentView = NSHostingView(
@@ -1009,7 +1050,4 @@ final class LicenseWindowController: NSWindowController, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    func windowWillClose(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
-    }
 }

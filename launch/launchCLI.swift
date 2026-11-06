@@ -117,11 +117,8 @@ enum launchCLI {
 
     private static func runLicenseStatus() -> Int32 {
         let manager = LicenseManager.shared
-        print(manager.displayStatus)
-        if let days = manager.trialDaysRemaining {
-            print("trial_days_remaining=\(days)")
-        }
-        return manager.isAllowed ? 0 : 3
+        print(manager.cachedDisplayStatus)
+        return manager.cachedAccessAllowed ? 0 : 3
     }
 
     static func printHelp() {

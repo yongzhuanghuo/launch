@@ -275,7 +275,7 @@ struct ClassicSettingsView: View {
             settingsRow("在菜单栏显示图标") {
                 Toggle("", isOn: $appStore.showMenuBarIcon).labelsHidden().toggleStyle(.switch)
             }
-            settingsRow("将 launch 保留在 Dock 中", subtitle: "将 launch 保留在 Dock 中，方便快速启动。") {
+            settingsRow("将启动台保留在 Dock 中", subtitle: "将启动台保留在 Dock 中，方便快速启动。") {
                 Button("添加到 Dock") {
                     if !appStore.addToDock() {
                         alertMessage = "无法自动添加到 Dock。请将 launch.app 拖入 Dock，并选择“保留在 Dock 中”。"
@@ -710,7 +710,7 @@ struct ClassicSettingsView: View {
             settingsRow("检查更新") {
                 Button("检查更新…") { appStore.checkForUpdates() }
             }
-            settingsRow("高级设置", subtitle: "launch 的 CLI、卸载器、音效、手柄、性能、备份等选项。") {
+            settingsRow("高级设置", subtitle: "启动台的 CLI、卸载器、音效、手柄、性能、备份等选项。") {
                 Button("高级…") { onOpenAdvanced() }
             }
             settingsRow("邮箱") {

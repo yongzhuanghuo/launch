@@ -158,18 +158,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSGestureR
         let command = parsed.command ?? ""
         if !["help", "license"].contains(command), !LicenseManager.shared.cachedAccessAllowed {
             fputs("LICENSE_REQUIRED\n", stderr)
-            isTerminating = true
-            NSApp.terminate(nil)
-            return true
+            exit(3)
         }
 
         let needsEndpoint = requiresCLIEndpoint(parsed)
         if needsEndpoint && !appStore.developmentEnableCLICode {
             fputs("Command line interface is disabled.\n", stderr)
             fputs("Make sure \"Command line interface\" is ON in General settings.\n", stderr)
-            isTerminating = true
-            NSApp.terminate(nil)
-            return true
+            exit(1)
         }
 
         let context: launchCLIContext
@@ -177,9 +173,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSGestureR
         if needsEndpoint {
             guard let socketPath = launchCLIIPCConfig.socketPath() else {
                 fputs("Failed to resolve launch CLI socket path.\n", stderr)
-                isTerminating = true
-                NSApp.terminate(nil)
-                return true
+                exit(1)
             }
             socketPathForEndpoint = socketPath
             context = launchCLIContext(executeRemoteCommand: { request in
@@ -207,8 +201,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSGestureR
             return true
         }
 
-        _ = launchCLI.run(parsed: parsed, context: context)
+        let exitCode = launchCLI.run(parsed: parsed, context: context)
         isTerminating = true
+        if exitCode != 0 {
+            exit(exitCode)
+        }
         NSApp.terminate(nil)
         return true
     }
@@ -1788,16 +1785,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSGestureR
         guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
-            let image = NSImage(systemSymbolName: "square.grid.3x3.fill", accessibilityDescription: "launch")
+            let image = NSImage(systemSymbolName: "square.grid.3x3.fill", accessibilityDescription: "启动台")
             image?.isTemplate = true
             button.image = image
-            button.toolTip = "launch"
+            button.toolTip = "启动台"
         }
         let menu = NSMenu()
-        let show = NSMenuItem(title: "Show launch", action: #selector(statusShowLaunchpad(_:)), keyEquivalent: "")
+        let show = NSMenuItem(title: "打开启动台", action: #selector(statusShowLaunchpad(_:)), keyEquivalent: "")
         show.target = self
         menu.addItem(show)
-        let settings = NSMenuItem(title: "Settings", action: #selector(statusOpenSettings(_:)), keyEquivalent: "")
+        let settings = NSMenuItem(title: "设置…", action: #selector(statusOpenSettings(_:)), keyEquivalent: "")
         settings.target = self
         menu.addItem(settings)
         let license = NSMenuItem(title: "授权…", action: #selector(statusShowLicense(_:)), keyEquivalent: "")
@@ -1872,12 +1869,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSGestureR
         window.collectionBehavior = [.transient, .canJoinAllApplications, .fullScreenAuxiliary, .ignoresCycle, .stationary]
         window.orderFrontRegardless()
         
-        // LSUIElement apps cannot reliably steal focus on current macOS. Switch
-        // to a regular activation policy while the launcher is visible so the
-        // window becomes frontmost (and is not shown as an inactive 90% window).
-        if appStore.isClassicLaunchpad {
-            NSApp.setActivationPolicy(.regular)
-        }
+        // Keep the app as a regular Dock app while the launcher is visible so
+        // the window becomes frontmost and the Dock icon represents it.
+        NSApp.setActivationPolicy(.regular)
         // Force window to become key and main window for proper focus
         NSApp.activate(ignoringOtherApps: true)
         NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
@@ -1941,9 +1935,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSGestureR
             self.appStore.searchText = ""
             self.appStore.openFolder = nil
             self.appStore.saveAllOrder()
-            if self.appStore.isClassicLaunchpad {
-                NSApp.setActivationPolicy(.accessory)
-            }
             NotificationCenter.default.post(name: .launchpadWindowHidden, object: nil)
         }
 
