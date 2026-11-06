@@ -7645,10 +7645,10 @@ final class AppStore: ObservableObject {
     }
 
     func checkForUpdates() {
-        checkForUpdates(automaticRetriesRemaining: nil)
+        checkForUpdates(automaticRetriesRemaining: nil, userInitiated: true)
     }
 
-    private func checkForUpdates(automaticRetriesRemaining: Int?) {
+    private func checkForUpdates(automaticRetriesRemaining: Int?, userInitiated: Bool = false) {
         if automaticRetriesRemaining != nil {
             guard autoCheckForUpdates else { return }
         }
@@ -7675,15 +7675,26 @@ final class AppStore: ObservableObject {
                             notes: latestRelease.changelog
                         )
                         updateState = .updateAvailable(release)
-                        presentUpdateAlert(for: release)
+                        if userInitiated {
+                            launchUpdater(for: release)
+                        } else {
+                            presentUpdateAlert(for: release)
+                        }
                     } else {
                         updateState = .upToDate(latest: latestRelease.version)
+                        if userInitiated {
+                            presentUpToDateAlert(version: latestRelease.version)
+                        }
                     }
                 }
             } catch {
                 await MainActor.run {
                     let message = error.localizedDescription
-                    handleUpdateCheckFailure(message, automaticRetriesRemaining: automaticRetriesRemaining)
+                    handleUpdateCheckFailure(
+                        message,
+                        automaticRetriesRemaining: automaticRetriesRemaining,
+                        userInitiated: userInitiated
+                    )
                 }
             }
         }
@@ -7712,12 +7723,20 @@ final class AppStore: ObservableObject {
     }
 
     @MainActor
-    private func handleUpdateCheckFailure(_ message: String, automaticRetriesRemaining: Int?) {
+    private func handleUpdateCheckFailure(
+        _ message: String,
+        automaticRetriesRemaining: Int?,
+        userInitiated: Bool = false
+    ) {
         guard let retriesRemaining = automaticRetriesRemaining,
               retriesRemaining > 0,
               autoCheckForUpdates else {
             updateState = .failed(message)
-            presentUpdateFailureAlert(message)
+            if userInitiated {
+                presentUpdateFailureDialog(message)
+            } else {
+                presentUpdateFailureAlert(message)
+            }
             return
         }
 
@@ -7737,6 +7756,26 @@ final class AppStore: ObservableObject {
             body: "\(localized(.newVersion)) \(release.version)",
             releaseURL: release.url
         )
+    }
+
+    @MainActor
+    private func presentUpToDateAlert(version: String) {
+        let alert = NSAlert()
+        alert.messageText = localized(.upToDate)
+        alert.informativeText = LicenseText.t("启动台 \(version)", "Launchpad \(version)")
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: LicenseText.t("好", "OK"))
+        alert.runModal()
+    }
+
+    @MainActor
+    private func presentUpdateFailureDialog(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = localized(.updateCheckFailed)
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: LicenseText.t("好", "OK"))
+        alert.runModal()
     }
 
     @MainActor
@@ -7891,29 +7930,43 @@ final class AppStore: ObservableObject {
             throw UpdaterLaunchError.notExecutable
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-
         let assetPattern = "launch.*\\.zip"
         let bundlePath = Bundle.main.bundlePath
 
-        var arguments: [String] = ["-na", "Terminal", "--args", updaterURL.path]
-
-        arguments.append(contentsOf: ["--feed-url", feedURL])
-
-        arguments.append(contentsOf: [
+        // `open -na Terminal --args` 只把参数传给 Terminal，不会传给被执行的
+        // SwiftUpdater，导致更新器退回 GitHub 旧接口并 404。用 .command 脚本
+        // 把参数写进脚本，再由 Terminal 执行。
+        let command = [
+            updaterURL.path,
+            "--feed-url", feedURL,
             "--asset-pattern", assetPattern,
             "--install-dir", bundlePath,
-            "--hold-window"
-        ])
+            "--hold-window",
+        ].map(Self.shellQuoted).joined(separator: " ")
+        let script = "#!/bin/bash\nexec \(command)\n"
 
-        process.arguments = arguments
+        let supportDir = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first!.appendingPathComponent("launch/updates", isDirectory: true)
+        try FileManager.default.createDirectory(at: supportDir, withIntermediateDirectories: true)
+        let scriptURL = supportDir.appendingPathComponent("run-updater.command", isDirectory: false)
+        try script.write(to: scriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = ["-na", "Terminal", scriptURL.path]
 
         do {
             try process.run()
         } catch {
             throw UpdaterLaunchError.spawnFailed(error)
         }
+    }
+
+    private static func shellQuoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     @MainActor

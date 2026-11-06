@@ -1752,12 +1752,12 @@ final class LocalizationManager {
             .updatesRefreshButton: "重新检查",
             .openUpdaterConfig: "打开更新配置文件",
             .updaterConfirmTitle: "使用终端安装更新？",
-                .updaterConfirmMessage: "launch 将会退出并在终端中运行更新器。安装完成后会自动重新启动。\n\n如果右侧的“下载更新”按钮是透明的，请直接点击。\n这是 macOS 的 bug。⬇️",
-                .updaterTerminalHint: "更新会在终端中执行，launch 将退出并自动重新启动。",
+                .updaterConfirmMessage: "启动台将会退出并在终端中运行更新器。安装完成后会自动重新启动。\n\n如果右侧的“下载更新”按钮是透明的，请直接点击。\n这是 macOS 的 bug。⬇️",
+                .updaterTerminalHint: "更新会在终端中执行，启动台将退出并自动重新启动。",
                 .updaterLaunchFailed: "无法启动更新器（%@）。",
                 .updaterMissingBinary: "应用包内未找到更新器。",
                 .updaterNotExecutable: "更新器文件不可执行。",
-                .updaterHoldPrompt: "更新完成后，按回车键关闭窗口，launch 会自动重新打开。"
+                .updaterHoldPrompt: "更新完成后，按回车键关闭窗口，启动台会自动重新打开。"
             ],
             .japanese: [
                 .reverseWheelPagingTitle: "ホイールのページ送り方向を反転",
