@@ -34,8 +34,13 @@ if [[ -z "$UPDATER_SRC" || ! -f "$UPDATER_SRC" ]]; then
   echo "error: universal SwiftUpdater binary not found" >&2
   exit 1
 fi
-mkdir -p UpdaterScripts/SwiftUpdater/.build/apple/Products/Release
-cp -f "$UPDATER_SRC" UpdaterScripts/SwiftUpdater/.build/apple/Products/Release/SwiftUpdater
+DEST_UPDATER="UpdaterScripts/SwiftUpdater/.build/apple/Products/Release/SwiftUpdater"
+mkdir -p "$(dirname "$DEST_UPDATER")"
+if [[ "$UPDATER_SRC" -ef "$DEST_UPDATER" ]]; then
+  echo "SwiftUpdater already in place: $DEST_UPDATER"
+else
+  cp -f "$UPDATER_SRC" "$DEST_UPDATER"
+fi
 
 echo "Building universal launch.app (unsigned)..."
 rm -rf "$DERIVED_DIR"

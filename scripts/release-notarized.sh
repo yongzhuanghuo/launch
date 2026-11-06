@@ -278,8 +278,13 @@ if [[ "${MODE}" == "notarize" ]]; then
     UPDATER_SRC="$(find "${ROOT_DIR}/UpdaterScripts/SwiftUpdater/.build" -path '*/Products/Release/SwiftUpdater' -type f | head -1)"
   fi
   if [[ -n "${UPDATER_SRC}" && -f "${UPDATER_SRC}" ]]; then
-    mkdir -p "${ROOT_DIR}/UpdaterScripts/SwiftUpdater/.build/apple/Products/Release"
-    cp -f "${UPDATER_SRC}" "${ROOT_DIR}/UpdaterScripts/SwiftUpdater/.build/apple/Products/Release/SwiftUpdater"
+    DEST_UPDATER="${ROOT_DIR}/UpdaterScripts/SwiftUpdater/.build/apple/Products/Release/SwiftUpdater"
+    mkdir -p "$(dirname "${DEST_UPDATER}")"
+    if [[ "${UPDATER_SRC}" -ef "${DEST_UPDATER}" ]]; then
+      echo "SwiftUpdater already in place: ${DEST_UPDATER}"
+    else
+      cp -f "${UPDATER_SRC}" "${DEST_UPDATER}"
+    fi
   fi
 
   echo "Creating the Xcode archive..."
