@@ -61,16 +61,12 @@ jobs:
           ZIP_PATH: ${{ steps.sums.outputs.zip_path }}
           DMG_PATH: ${{ steps.sums.outputs.dmg_path }}
         run: |
-          IMMUTABLE=(-i "$OSS_KEY_ID" -k "$OSS_KEY_SECRET" -e oss-cn-shanghai.aliyuncs.com -f --meta Cache-Control:public,max-age=31536000,immutable)
           LATEST=(-i "$OSS_KEY_ID" -k "$OSS_KEY_SECRET" -e oss-cn-shanghai.aliyuncs.com -f --meta Cache-Control:no-cache)
-          # 版本化留档
-          ossutil cp "$ZIP_PATH" "oss://4kdownlebucket/launch/macos/${VERSION}/launch-${VERSION}.zip" "${IMMUTABLE[@]}"
-          ossutil cp "$DMG_PATH" "oss://4kdownlebucket/launch/macos/${VERSION}/launch-${VERSION}.dmg" "${IMMUTABLE[@]}"
-          # 固定下载地址（与 Downie6 一样放在 releases/ 下）
-          ossutil cp "$ZIP_PATH" "oss://4kdownlebucket/releases/launch.zip" "${LATEST[@]}"
-          ossutil cp "$DMG_PATH" "oss://4kdownlebucket/releases/launch.dmg" "${LATEST[@]}"
+          # 只保留稳定地址：launch.dmg 给用户下载，launch.zip 给自动更新
+          ossutil cp "$ZIP_PATH" "oss://4kdownlebucket/launch/macos/latest/launch.zip" "${LATEST[@]}"
+          ossutil cp "$DMG_PATH" "oss://4kdownlebucket/launch/macos/latest/launch.dmg" "${LATEST[@]}"
 
-      - name: Publish latest.json and notify API
+      - name: Notify release API
         env:
           OSS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
           OSS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
@@ -86,19 +82,17 @@ jobs:
           test -n "$RELEASE_TOKEN"
           API_BASE="${API_BASE:-http://8.153.99.239:3000}"
           BASE="https://4kdownlebucket.oss-cn-shanghai.aliyuncs.com"
-          ZIP_URL="${BASE}/releases/launch.zip"
-          DMG_URL="${BASE}/releases/launch.dmg"
+          ZIP_URL="${BASE}/launch/macos/latest/launch.zip"
+          DMG_URL="${BASE}/launch/macos/latest/launch.dmg"
           CHANGELOG=$(git log -1 --pretty=%s)
-          export VERSION BUILD ZIP_SHA ZIP_SIZE DMG_SHA DMG_SIZE ZIP_URL DMG_URL CHANGELOG
+          export VERSION BUILD ZIP_SHA ZIP_SIZE ZIP_URL DMG_URL CHANGELOG
           python3 - <<'PY'
           import json
           import os
-          from datetime import datetime, timezone
 
           manifest = {
               "product": "launch",
               "platform": "macos",
-              "channel": "stable",
               "version": os.environ["VERSION"],
               "build": int(os.environ["BUILD"]),
               "url": os.environ["ZIP_URL"],
@@ -107,13 +101,9 @@ jobs:
               "size": int(os.environ["ZIP_SIZE"]),
               "changelog": os.environ.get("CHANGELOG", ""),
               "force": False,
-              "published_at": datetime.now(timezone.utc).isoformat(),
           }
-          open("/tmp/latest.json", "w", encoding="utf-8").write(json.dumps(manifest, ensure_ascii=False))
           open("/tmp/publish.json", "w", encoding="utf-8").write(json.dumps(manifest, ensure_ascii=False))
           PY
-          OSS_ARGS=(-i "$OSS_KEY_ID" -k "$OSS_KEY_SECRET" -e oss-cn-shanghai.aliyuncs.com -f --meta Cache-Control:no-cache)
-          ossutil cp /tmp/latest.json oss://4kdownlebucket/releases/launch.json "${OSS_ARGS[@]}"
           curl -fsS -X POST "$API_BASE/api/internal/releases/publish" \
             -H "Content-Type: application/json" \
             -H "X-Release-Token: $RELEASE_TOKEN" \
