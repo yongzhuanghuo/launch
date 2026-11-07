@@ -130,6 +130,11 @@ struct CAGridViewRepresentable: NSViewRepresentable {
                 )
             }
         }
+        view.onUninstallSelectedApps = { paths in
+            let apps = appStore.apps.filter { paths.contains($0.url.path) }
+            guard !apps.isEmpty else { return }
+            AppUninstallerWindowController.shared.show(apps: apps, appStore: appStore)
+        }
 
         // 拖拽创建文件夹
         view.onCreateFolder = { dragApp, targetApp, insertAt in
@@ -234,6 +239,11 @@ struct CAGridViewRepresentable: NSViewRepresentable {
         nsView.classicBackgroundMenuActions = makeClassicBackgroundMenuActions()
         nsView.optionGroupingEnabled = appStore.optionGroupingEnabled
         nsView.allowsBatchSelectionMode = allowsBatchSelection
+        nsView.onUninstallSelectedApps = { paths in
+            let apps = appStore.apps.filter { paths.contains($0.url.path) }
+            guard !apps.isEmpty else { return }
+            AppUninstallerWindowController.shared.show(apps: apps, appStore: appStore)
+        }
 
         // 检查刷新触发器是否变化（文件夹创建/修改会触发）
         let triggerChanged = context.coordinator.lastGridRefreshTrigger != gridRefreshTrigger ||

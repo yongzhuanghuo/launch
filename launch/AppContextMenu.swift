@@ -20,6 +20,8 @@ extension AppContextMenuTitleKey {
             return .hiddenAppsAddButton
         case .uninstallApp:
             return .contextMenuUninstallApp
+        case .uninstallBatch:
+            return .contextMenuUninstallBatch
         case .uninstallWithConfiguredTool:
             return .contextMenuUninstallWithConfiguredTool
         case .batchSelectApps:
@@ -127,6 +129,10 @@ private final class launchContextMenuRouteHandler: AppContextMenuRouteHandling {
 
     func uninstallApp(_ app: AppInfo) {
         AppUninstallerWindowController.shared.show(app: app, appStore: appStore)
+    }
+
+    func uninstallBatch() {
+        // 批量卸载由 CAGridView 读取当前勾选的 App 后直接处理。
     }
 
     func uninstallWithConfiguredTool(_ app: AppInfo) {

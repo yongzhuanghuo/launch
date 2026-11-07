@@ -123,6 +123,7 @@ final class CAGridView: NSView, CALayerDelegate, NSDraggingSource {
     var onFPSUpdate: ((Double) -> Void)?
     var onEmptyAreaClicked: (() -> Void)?
     var onContextMenuAction: ((AppContextMenuRoute) -> Void)?
+    var onUninstallSelectedApps: (([String]) -> Void)?
     var onCreateFolder: ((AppInfo, AppInfo, Int) -> Void)?  // (拖拽的app, 目标app, 位置)
     var onMoveToFolder: ((AppInfo, FolderInfo) -> Void)?    // 移动到已有文件夹
     var onReorderItems: ((Int, Int) -> Void)?               // 重新排序 (fromIndex, toIndex)

@@ -54,9 +54,11 @@ struct UninstallFileItem: Identifiable {
     let kind: UninstallFileKind
     let size: Int64
     let fuzzy: Bool
+    let appPath: String
+    let appName: String
     var selected: Bool = true
 
-    var id: String { url.path }
+    var id: String { appPath + "|" + url.path }
 
     var displayPath: String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -75,7 +77,7 @@ private struct UninstallScanResult {
 
 @MainActor
 final class AppUninstallerModel: ObservableObject {
-    let app: AppInfo
+    let apps: [AppInfo]
     private let appStore: AppStore
 
     @Published var items: [UninstallFileItem] = []
@@ -87,27 +89,34 @@ final class AppUninstallerModel: ObservableObject {
     @Published var isRunning = false
 
     var canUninstall: Bool {
-        let path = app.url.standardizedFileURL.path
-        guard !path.hasPrefix("/System/") else { return false }
-        return app.url.standardizedFileURL != Bundle.main.bundleURL.standardizedFileURL
+        blockedReason == nil
     }
 
     var blockedReason: String? {
-        let path = app.url.standardizedFileURL.path
-        if path.hasPrefix("/System/") {
-            return LicenseText.t("系统自带应用不能在这里卸载", "System apps cannot be uninstalled here")
-        }
-        if app.url.standardizedFileURL == Bundle.main.bundleURL.standardizedFileURL {
-            return LicenseText.t("不能卸载启动台本身", "启动台 cannot uninstall itself")
+        for app in apps {
+            let path = app.url.standardizedFileURL.path
+            if path.hasPrefix("/System/") {
+                return LicenseText.t(
+                    "\(app.name) 是系统自带应用，不能在这里卸载",
+                    "\(app.name) is a system app and cannot be uninstalled here"
+                )
+            }
+            if app.url.standardizedFileURL == Bundle.main.bundleURL.standardizedFileURL {
+                return LicenseText.t("不能卸载启动台本身", "启动台 cannot uninstall itself")
+            }
         }
         return nil
     }
 
-    init(app: AppInfo, appStore: AppStore) {
-        self.app = app
+    init(apps: [AppInfo], appStore: AppStore) {
+        self.apps = apps
         self.appStore = appStore
-        self.isRunning = Self.runningApplication(for: app) != nil
+        self.isRunning = apps.contains { Self.runningApplication(for: $0) != nil }
         scan()
+    }
+
+    convenience init(app: AppInfo, appStore: AppStore) {
+        self.init(apps: [app], appStore: appStore)
     }
 
     var selectedItems: [UninstallFileItem] { items.filter(\.selected) }
@@ -117,16 +126,24 @@ final class AppUninstallerModel: ObservableObject {
     func scan() {
         isScanning = true
         status = LicenseText.t("正在扫描关联文件…", "Scanning associated files…")
-        let app = self.app
+        let apps = self.apps
         Task.detached(priority: .userInitiated) {
-            let result = Self.performScan(app: app)
+            var allItems: [UninstallFileItem] = []
+            var needsFDA = false
+            var errors: [String] = []
+            for app in apps {
+                let result = Self.performScan(app: app)
+                allItems.append(contentsOf: result.items)
+                needsFDA = needsFDA || result.needsFullDiskAccess
+                errors.append(contentsOf: result.errors)
+            }
             await MainActor.run {
-                self.items = result.items
-                self.needsFullDiskAccess = result.needsFullDiskAccess
-                self.errorMessage = result.errors.first
+                self.items = allItems
+                self.needsFullDiskAccess = needsFDA
+                self.errorMessage = errors.first
                 self.isScanning = false
                 self.status = ""
-                self.isRunning = Self.runningApplication(for: self.app) != nil
+                self.isRunning = apps.contains { Self.runningApplication(for: $0) != nil }
             }
         }
     }
@@ -146,7 +163,8 @@ final class AppUninstallerModel: ObservableObject {
         status = LicenseText.t("正在退出应用…", "Quitting app…")
 
         Task {
-            if let running = Self.runningApplication(for: app) {
+            for app in apps {
+                guard let running = Self.runningApplication(for: app) else { continue }
                 running.terminate()
                 for _ in 0..<20 where running.isTerminated == false {
                     try? await Task.sleep(nanoseconds: 100_000_000)
@@ -160,7 +178,13 @@ final class AppUninstallerModel: ObservableObject {
             status = LicenseText.t("正在移到废纸篓…", "Moving to Trash…")
             var failures: [String] = []
             // 先删关联文件，最后删 app 本体。
-            for item in selected.sorted(by: { ($0.kind == .app ? 1 : 0) < ($1.kind == .app ? 1 : 0) }) {
+            let ordered = selected.sorted { lhs, rhs in
+                let lhsApp = lhs.kind == .app
+                let rhsApp = rhs.kind == .app
+                if lhsApp != rhsApp { return !lhsApp }
+                return lhs.appPath < rhs.appPath
+            }
+            for item in ordered {
                 do {
                     try FileManager.default.trashItem(at: item.url, resultingItemURL: nil)
                 } catch {
@@ -292,7 +316,9 @@ final class AppUninstallerModel: ObservableObject {
                     url: url,
                     kind: kind,
                     size: directorySize(url),
-                    fuzzy: fuzzy
+                    fuzzy: fuzzy,
+                    appPath: appURL.path,
+                    appName: app.name
                 )
             )
         }
@@ -330,26 +356,33 @@ struct AppUninstallerView: View {
     @ObservedObject var model: AppUninstallerModel
     @State private var showConfirm = false
 
-    private var groupedItems: [(UninstallFileKind, [UninstallFileItem])] {
-        UninstallFileKind.allCases.compactMap { kind in
-            let items = model.items.filter { $0.kind == kind }
-            return items.isEmpty ? nil : (kind, items)
-        }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 12) {
-                Image(nsImage: model.app.icon)
+                Image(nsImage: model.apps[0].icon)
                     .resizable()
                     .frame(width: 56, height: 56)
+                    .overlay(alignment: .bottomTrailing) {
+                        if model.apps.count > 1 {
+                            Text("\(model.apps.count)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(4)
+                                .background(Color.red, in: Circle())
+                                .offset(x: 4, y: 4)
+                        }
+                    }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(LicenseText.t("卸载 \(model.app.name)", "Uninstall \(model.app.name)"))
+                    Text(model.apps.count == 1
+                         ? LicenseText.t("卸载 \(model.apps[0].name)", "Uninstall \(model.apps[0].name)")
+                         : LicenseText.t("卸载 \(model.apps.count) 个应用", "Uninstall \(model.apps.count) apps"))
                         .font(.system(size: 20, weight: .bold))
-                    Text(model.app.url.path)
+                    Text(model.apps.count == 1
+                         ? model.apps[0].url.path
+                         : model.apps.map(\.name).joined(separator: "、"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .lineLimit(2)
                     if model.isRunning {
                         Label(
                             LicenseText.t("应用正在运行，卸载前会自动退出", "The app is running and will be quit before uninstalling"),
@@ -401,14 +434,26 @@ struct AppUninstallerView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
-                        ForEach(groupedItems, id: \.0) { kind, items in
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(kind.title)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                ForEach(items) { item in
-                                    fileRow(item)
+                    LazyVStack(alignment: .leading, spacing: 14) {
+                        ForEach(model.apps) { app in
+                            let groups = UninstallFileKind.allCases.compactMap { kind -> (UninstallFileKind, [UninstallFileItem])? in
+                                let items = model.items.filter { $0.appPath == app.url.path && $0.kind == kind }
+                                return items.isEmpty ? nil : (kind, items)
+                            }
+                            if !groups.isEmpty {
+                                if model.apps.count > 1 {
+                                    Text(app.name)
+                                        .font(.system(size: 13, weight: .semibold))
+                                }
+                                ForEach(groups, id: \.0) { kind, items in
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(kind.title)
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(.secondary)
+                                        ForEach(items) { item in
+                                            fileRow(item)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -453,7 +498,10 @@ struct AppUninstallerView: View {
         }
         .padding(20)
         .frame(width: 620, height: 560)
-        .alert(LicenseText.t("确认卸载 \(model.app.name)？", "Uninstall \(model.app.name)?"), isPresented: $showConfirm) {
+        .alert(model.apps.count == 1
+               ? LicenseText.t("确认卸载 \(model.apps[0].name)？", "Uninstall \(model.apps[0].name)?")
+               : LicenseText.t("确认卸载 \(model.apps.count) 个应用？", "Uninstall \(model.apps.count) apps?"),
+               isPresented: $showConfirm) {
             Button(LicenseText.t("取消", "Cancel"), role: .cancel) {}
             Button(LicenseText.t("移到废纸篓", "Move to Trash"), role: .destructive) {
                 model.uninstall()
@@ -522,16 +570,23 @@ final class AppUninstallerWindowController: NSWindowController {
     }
 
     func show(app: AppInfo, appStore: AppStore) {
+        show(apps: [app], appStore: appStore)
+    }
+
+    func show(apps: [AppInfo], appStore: AppStore) {
         close()
-        let model = AppUninstallerModel(app: app, appStore: appStore)
+        guard !apps.isEmpty else { return }
+        let model = AppUninstallerModel(apps: apps, appStore: appStore)
         self.model = model
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 560),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: apps.count > 1 ? 620 : 560),
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
         )
-        window.title = LicenseText.t("卸载 \(app.name)", "Uninstall \(app.name)")
+        window.title = apps.count == 1
+            ? LicenseText.t("卸载 \(apps[0].name)", "Uninstall \(apps[0].name)")
+            : LicenseText.t("卸载 \(apps.count) 个应用", "Uninstall \(apps.count) apps")
         window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(rootView: AppUninstallerView(model: model))
         window.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 2)

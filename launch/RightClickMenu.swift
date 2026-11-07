@@ -272,6 +272,9 @@ extension CAGridView {
             enableBatchSelectionMode()
         case .finishBatchSelection:
             disableBatchSelectionMode()
+        case .uninstallBatch:
+            onUninstallSelectedApps?(batchSelectedAppPathsOrdered)
+            disableBatchSelectionMode()
         default:
             if let onContextMenuAction {
                 onContextMenuAction(route)

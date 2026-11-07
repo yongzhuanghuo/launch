@@ -21,6 +21,7 @@ public enum AppContextMenuAction: Hashable {
     case removeQuarantine
     case hideApp
     case uninstallApp
+    case uninstallBatch
     case uninstallWithConfiguredTool
     case startBatchSelection
     case finishBatchSelection
@@ -39,6 +40,7 @@ public enum AppContextMenuTitleKey: Equatable {
     case removeQuarantineInTerminal
     case hideApp
     case uninstallApp
+    case uninstallBatch
     case uninstallWithConfiguredTool
     case batchSelectApps
     case finishBatchSelection
@@ -196,6 +198,15 @@ public enum AppContextMenuBuilder {
             entries.append(
                 item(.uninstallApp, .uninstallApp, symbol: "trash", role: .destructive)
             )
+            if surface == .coreAnimationMainGrid, capabilities.allowsBatchSelection {
+                entries.append(.separator)
+                if capabilities.isBatchSelectionActive {
+                    entries.append(item(.uninstallBatch, .uninstallBatch, symbol: "trash", role: .destructive))
+                    entries.append(item(.finishBatchSelection, .finishBatchSelection, symbol: "checkmark.circle"))
+                } else {
+                    entries.append(item(.startBatchSelection, .batchSelectApps, symbol: "checklist"))
+                }
+            }
             if capabilities.canUseConfiguredUninstallTool {
                 entries.append(
                     item(.uninstallWithConfiguredTool, .uninstallWithConfiguredTool, symbol: "trash", role: .destructive)
@@ -235,11 +246,12 @@ public enum AppContextMenuBuilder {
 
         if surface == .coreAnimationMainGrid, capabilities.allowsBatchSelection {
             entries.append(.separator)
-            entries.append(
-                capabilities.isBatchSelectionActive
-                    ? item(.finishBatchSelection, .finishBatchSelection, symbol: "checkmark.circle")
-                    : item(.startBatchSelection, .batchSelectApps, symbol: "checklist")
-            )
+            if capabilities.isBatchSelectionActive {
+                entries.append(item(.uninstallBatch, .uninstallBatch, symbol: "trash", role: .destructive))
+                entries.append(item(.finishBatchSelection, .finishBatchSelection, symbol: "checkmark.circle"))
+            } else {
+                entries.append(item(.startBatchSelection, .batchSelectApps, symbol: "checklist"))
+            }
         }
 
         if capabilities.canUseConfiguredUninstallTool {
@@ -344,6 +356,7 @@ public enum AppContextMenuRoute<App, Folder> {
     case removeQuarantine(App)
     case hideApp(App)
     case uninstallApp(App)
+    case uninstallBatch
     case uninstallWithConfiguredTool(App)
     case startBatchSelection
     case finishBatchSelection
@@ -368,6 +381,7 @@ public protocol AppContextMenuRouteHandling: AnyObject {
     func removeQuarantine(_ app: App)
     func hideApp(_ app: App)
     func uninstallApp(_ app: App)
+    func uninstallBatch()
     func uninstallWithConfiguredTool(_ app: App)
     func startBatchSelection()
     func finishBatchSelection()
@@ -397,6 +411,8 @@ public enum AppContextMenuRouter {
             return .hideApp(app)
         case (.uninstallApp, .app(let app, _)):
             return .uninstallApp(app)
+        case (.uninstallBatch, .app):
+            return .uninstallBatch
         case (.uninstallWithConfiguredTool, .app(let app, _)):
             return .uninstallWithConfiguredTool(app)
         case (.startBatchSelection, .app):
@@ -452,6 +468,8 @@ public enum AppContextMenuRouter {
             handler.hideApp(app)
         case .uninstallApp(let app):
             handler.uninstallApp(app)
+        case .uninstallBatch:
+            handler.uninstallBatch()
         case .uninstallWithConfiguredTool(let app):
             handler.uninstallWithConfiguredTool(app)
         case .startBatchSelection:

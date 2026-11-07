@@ -424,6 +424,7 @@ enum LocalizationKey: String {
     case contextMenuRenameFolder
     case contextMenuDissolveFolder
     case contextMenuUninstallApp
+    case contextMenuUninstallBatch
     case contextMenuUninstallWithConfiguredTool
     case contextMenuBatchSelectApps
     case contextMenuFinishBatchSelection
@@ -3971,6 +3972,7 @@ final class LocalizationManager {
             .contextMenuRenameFolder: "Rename Folder",
             .contextMenuDissolveFolder: "Dissolve folder",
             .contextMenuUninstallApp: "Uninstall App…",
+            .contextMenuUninstallBatch: "Uninstall Selected Apps…",
             .contextMenuUninstallWithConfiguredTool: "Uninstall with configured tool",
             .contextMenuBatchSelectApps: "Batch Select Apps",
             .contextMenuFinishBatchSelection: "Finish Batch Selection",
@@ -4171,6 +4173,7 @@ final class LocalizationManager {
             .contextMenuRenameFolder: "重命名文件夹",
             .contextMenuDissolveFolder: "解散文件夹",
             .contextMenuUninstallApp: "卸载应用…",
+            .contextMenuUninstallBatch: "卸载所选 App…",
             .contextMenuUninstallWithConfiguredTool: "用已配置卸载工具卸载",
             .contextMenuBatchSelectApps: "批量选择应用",
             .contextMenuFinishBatchSelection: "完成批量选择",
@@ -4619,6 +4622,7 @@ final class LocalizationManager {
             .contextMenuRenameFolder: "重新命名資料夾",
             .contextMenuDissolveFolder: "解散資料夾",
             .contextMenuUninstallApp: "解除安裝應用程式…",
+            .contextMenuUninstallBatch: "解除安裝所選 App…",
             .contextMenuUninstallWithConfiguredTool: "用已設定解除安裝工具解除安裝",
             .contextMenuBatchSelectApps: "批次選擇應用",
             .contextMenuFinishBatchSelection: "完成批次選擇",

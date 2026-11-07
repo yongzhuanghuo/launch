@@ -67,9 +67,54 @@ final class AppContextMenuTests: XCTestCase {
         )
 
         capabilities.isBatchSelectionActive = true
-        XCTAssertTrue(
-            tokens(for: entries(target: .app(container: .mainGrid), surface: .coreAnimationMainGrid, capabilities: capabilities))
-                .contains(.action(.finishBatchSelection))
+        XCTAssertEqual(
+            tokens(for: entries(target: .app(container: .mainGrid), surface: .coreAnimationMainGrid, capabilities: capabilities)),
+            [
+                .action(.showInFinder),
+                .action(.copyPath),
+                .separator,
+                .action(.hideApp),
+                .separator,
+                .action(.uninstallApp),
+                .separator,
+                .action(.uninstallBatch),
+                .action(.finishBatchSelection),
+                .separator,
+                .action(.uninstallWithConfiguredTool)
+            ]
+        )
+    }
+
+    func testClassicMainGridSupportsBatchUninstall() {
+        var capabilities = AppContextMenuCapabilities(
+            allowsBatchSelection: true,
+            classicMode: true
+        )
+
+        XCTAssertEqual(
+            tokens(for: entries(target: .app(container: .mainGrid), surface: .coreAnimationMainGrid, capabilities: capabilities)),
+            [
+                .action(.showInFinder),
+                .action(.hideApp),
+                .separator,
+                .action(.uninstallApp),
+                .separator,
+                .action(.startBatchSelection)
+            ]
+        )
+
+        capabilities.isBatchSelectionActive = true
+        XCTAssertEqual(
+            tokens(for: entries(target: .app(container: .mainGrid), surface: .coreAnimationMainGrid, capabilities: capabilities)),
+            [
+                .action(.showInFinder),
+                .action(.hideApp),
+                .separator,
+                .action(.uninstallApp),
+                .separator,
+                .action(.uninstallBatch),
+                .action(.finishBatchSelection)
+            ]
         )
     }
 
@@ -240,14 +285,16 @@ final class AppContextMenuTests: XCTestCase {
 
         var activeBatchCapabilities = capabilities
         activeBatchCapabilities.isBatchSelectionActive = true
-        let finish = try XCTUnwrap(item(
-            with: .finishBatchSelection,
-            in: entries(
-                target: .app(container: .mainGrid),
-                surface: .coreAnimationMainGrid,
-                capabilities: activeBatchCapabilities
-            )
-        ))
+        let activeBatchEntries = entries(
+            target: .app(container: .mainGrid),
+            surface: .coreAnimationMainGrid,
+            capabilities: activeBatchCapabilities
+        )
+        let uninstallBatch = try XCTUnwrap(item(with: .uninstallBatch, in: activeBatchEntries))
+        XCTAssertEqual(uninstallBatch.title, .localized(.uninstallBatch))
+        XCTAssertEqual(uninstallBatch.symbolName, "trash")
+        XCTAssertEqual(uninstallBatch.role, .destructive)
+        let finish = try XCTUnwrap(item(with: .finishBatchSelection, in: activeBatchEntries))
         XCTAssertEqual(finish.title, .localized(.finishBatchSelection))
         XCTAssertEqual(finish.symbolName, "checkmark.circle")
         XCTAssertEqual(finish.role, .normal)
@@ -294,6 +341,7 @@ final class AppContextMenuTests: XCTestCase {
             (.removeQuarantine, appTarget, .removeQuarantine("Example")),
             (.hideApp, appTarget, .hideApp("Example")),
             (.uninstallWithConfiguredTool, appTarget, .uninstallWithConfiguredTool("Example")),
+            (.uninstallBatch, appTarget, .uninstallBatch),
             (.startBatchSelection, appTarget, .startBatchSelection),
             (.finishBatchSelection, appTarget, .finishBatchSelection),
             (.pinToFolderQuickLaunchTop, appTarget, .pinToFolderQuickLaunchTop("Example", folderID: "folder-id")),
@@ -383,6 +431,10 @@ final class AppContextMenuTests: XCTestCase {
 
         func uninstallApp(_ app: String) {
             routes.append(.uninstallApp(app))
+        }
+
+        func uninstallBatch() {
+            routes.append(.uninstallBatch)
         }
 
         func uninstallWithConfiguredTool(_ app: String) {
