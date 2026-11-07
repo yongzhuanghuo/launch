@@ -156,8 +156,6 @@ struct ClassicSettingsView: View {
     @State private var selected: ClassicSettingsSection = .general
     @State private var alertMessage: String?
     @State private var pendingConfirmation: ClassicSettingsConfirmation?
-    @State private var editingSceneID: UUID?
-    @State private var editingSceneName = ""
 
     var body: some View {
         HStack(spacing: 0) {
@@ -648,21 +646,13 @@ struct ClassicSettingsView: View {
                     .background(Color.black.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 HStack(spacing: 4) {
-                    if editingSceneID == scene.id {
-                        TextField("", text: $editingSceneName)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 11))
-                            .onSubmit { commitSceneRename(scene.id) }
-                    } else {
-                        Text(scene.name)
-                            .font(.system(size: 11, weight: isActive ? .semibold : .regular))
-                            .lineLimit(1)
-                            .onTapGesture(count: 2) { startSceneRename(scene) }
-                        if isActive {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 10))
-                                .foregroundStyle(Color.accentColor)
-                        }
+                    Text(scene.name)
+                        .font(.system(size: 11, weight: isActive ? .semibold : .regular))
+                        .lineLimit(1)
+                    if isActive {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.accentColor)
                     }
                 }
             }
@@ -681,7 +671,7 @@ struct ClassicSettingsView: View {
         .contextMenu {
             Button("切换到此场景") { appStore.applyClassicScene(id: scene.id) }
                 .disabled(isActive)
-            Button("重命名…") { startSceneRename(scene) }
+            Button("重命名…") { renameScene(scene) }
             Button("复制场景") { appStore.duplicateClassicScene(id: scene.id) }
             Divider()
             Button("删除场景", role: .destructive) {
@@ -690,15 +680,17 @@ struct ClassicSettingsView: View {
         }
     }
 
-    private func startSceneRename(_ scene: AppStore.ClassicScene) {
-        editingSceneID = scene.id
-        editingSceneName = scene.name
-    }
-
-    private func commitSceneRename(_ id: UUID) {
-        appStore.renameClassicScene(id: id, name: editingSceneName)
-        editingSceneID = nil
-        editingSceneName = ""
+    private func renameScene(_ scene: AppStore.ClassicScene) {
+        let alert = NSAlert()
+        alert.messageText = "重命名场景"
+        alert.addButton(withTitle: "确定")
+        alert.addButton(withTitle: "取消")
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
+        field.stringValue = scene.name
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        appStore.renameClassicScene(id: scene.id, name: field.stringValue)
     }
 
     private func backupLayout() {
