@@ -99,8 +99,12 @@ final class AppStore: ObservableObject {
 
     struct UpdateRelease: Equatable {
         let version: String
+        /// 自动更新下载的 ZIP（带 SHA-256）。
         let url: URL
+        let dmgURL: URL?
         let notes: String?
+        let sha256: String
+        let size: Int?
     }
 
     struct PageIndicatorOverride: Codable, Equatable {
@@ -7665,11 +7669,14 @@ final class AppStore: ObservableObject {
                     let dmg = latestRelease.dmgURL.flatMap(URL.init(string:))
                     let zip = URL(string: latestRelease.url)
                     if latestRelease.build > currentBuild,
-                       let downloadURL = dmg ?? zip {
+                       let downloadURL = zip {
                         let release = UpdateRelease(
                             version: latestRelease.version,
                             url: downloadURL,
-                            notes: latestRelease.changelog
+                            dmgURL: dmg,
+                            notes: latestRelease.changelog,
+                            sha256: latestRelease.sha256,
+                            size: latestRelease.size
                         )
                         updateState = .updateAvailable(release)
                         let appVisible = AppDelegate.shared?.launchpadWindow?.isVisible == true
@@ -7894,89 +7901,7 @@ final class AppStore: ObservableObject {
 
     @MainActor
     func launchUpdater(for release: UpdateRelease) {
-        let alert = NSAlert()
-        alert.messageText = LicenseText.t(
-            "发现新版本 v\(release.version)",
-            "Update available v\(release.version)"
-        )
-        var details = LicenseText.t(
-            "当前版本 \(getCurrentVersion()) → 新版本 \(release.version)",
-            "Current \(getCurrentVersion()) → new \(release.version)"
-        )
-        let notes = release.notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !notes.isEmpty {
-            details += "\n\n\(notes)"
-        }
-        details += "\n\n" + localized(.updaterConfirmMessage)
-        alert.informativeText = details
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: localized(.downloadUpdate))
-        alert.addButton(withTitle: localized(.cancel))
-
-        
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-
-        do {
-            let feed = "\(LicenseConfig.apiBase)/api/version/latest?product=\(LicenseConfig.product)&platform=macos"
-            try startUpdaterProcess(feedURL: feed)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                AppDelegate.shared?.quitWithFade()
-            }
-        } catch {
-            presentUpdaterLaunchFailure(error)
-        }
-    }
-
-    private func startUpdaterProcess(feedURL: String) throws {
-        guard let updaterURL = Bundle.main.url(
-            forResource: "SwiftUpdater",
-            withExtension: nil,
-            subdirectory: "Updater"
-        ) else {
-            throw UpdaterLaunchError.missingBinary
-        }
-
-        guard FileManager.default.isExecutableFile(atPath: updaterURL.path) else {
-            throw UpdaterLaunchError.notExecutable
-        }
-
-        let assetPattern = "launch.*\\.zip"
-        let bundlePath = Bundle.main.bundlePath
-
-        // `open -na Terminal --args` 只把参数传给 Terminal，不会传给被执行的
-        // SwiftUpdater，导致更新器退回 GitHub 旧接口并 404。用 .command 脚本
-        // 把参数写进脚本，再由 Terminal 执行。
-        let command = [
-            updaterURL.path,
-            "--feed-url", feedURL,
-            "--asset-pattern", assetPattern,
-            "--install-dir", bundlePath,
-            "--hold-window",
-        ].map(Self.shellQuoted).joined(separator: " ")
-        let script = "#!/bin/bash\nexec \(command)\n"
-
-        let supportDir = FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first!.appendingPathComponent("launch/updates", isDirectory: true)
-        try FileManager.default.createDirectory(at: supportDir, withIntermediateDirectories: true)
-        let scriptURL = supportDir.appendingPathComponent("run-updater.command", isDirectory: false)
-        try script.write(to: scriptURL, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        process.arguments = ["-na", "Terminal", scriptURL.path]
-
-        do {
-            try process.run()
-        } catch {
-            throw UpdaterLaunchError.spawnFailed(error)
-        }
-    }
-
-    private static func shellQuoted(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        UpdateWindowController.shared.show(release: release)
     }
 
     @MainActor
