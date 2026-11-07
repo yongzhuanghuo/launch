@@ -21,7 +21,7 @@ fi
 APP_NAME="$(basename "$APP_PATH")"
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-VOLUME_NAME="${DMG_VOLUME_NAME:-启动台}"
+VOLUME_NAME="${DMG_VOLUME_NAME:-启动台 安装}"
 STAGE="$(mktemp -d "${TMPDIR:-/tmp}/launch-dmg.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 
@@ -36,7 +36,7 @@ if [[ -f "$ASSET_DIR/install-guide.png" ]]; then
   cp "$ASSET_DIR/install-guide.png" "$STAGE/安装说明.png"
 fi
 if [[ -f "$ASSET_DIR/background.png" ]]; then
-  cp "$ASSET_DIR/background.png" "$STAGE/.background/background.png"
+  cp "$ASSET_DIR/background.png" "$STAGE/.background/background-v3.png"
 fi
 if [[ -f "$ASSET_DIR/.DS_Store" ]]; then
   cp "$ASSET_DIR/.DS_Store" "$STAGE/.DS_Store"
