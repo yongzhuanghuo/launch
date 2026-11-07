@@ -7623,7 +7623,7 @@ final class AppStore: ObservableObject {
             self?.performAutomaticUpdateCheckIfNeeded()
         }
         autoCheckWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: work)
 
         let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
         timer.schedule(deadline: .now() + Self.automaticUpdateInterval,
@@ -7637,10 +7637,7 @@ final class AppStore: ObservableObject {
 
     private func performAutomaticUpdateCheckIfNeeded() {
         guard autoCheckForUpdates else { return }
-        let now = Date()
-        if let last = lastUpdateCheck, now.timeIntervalSince(last) < Self.automaticUpdateInterval {
-            return
-        }
+        // Downie6 每次启动都会检查一次；不要被上一次检查时间挡住。
         checkForUpdates(automaticRetriesRemaining: Self.automaticUpdateRetryCount)
     }
 
@@ -7675,7 +7672,8 @@ final class AppStore: ObservableObject {
                             notes: latestRelease.changelog
                         )
                         updateState = .updateAvailable(release)
-                        if userInitiated {
+                        let appVisible = AppDelegate.shared?.launchpadWindow?.isVisible == true
+                        if userInitiated || appVisible {
                             launchUpdater(for: release)
                         } else {
                             presentUpdateAlert(for: release)
@@ -7897,8 +7895,20 @@ final class AppStore: ObservableObject {
     @MainActor
     func launchUpdater(for release: UpdateRelease) {
         let alert = NSAlert()
-        alert.messageText = localized(.updaterConfirmTitle)
-        alert.informativeText = localized(.updaterConfirmMessage)
+        alert.messageText = LicenseText.t(
+            "发现新版本 v\(release.version)",
+            "Update available v\(release.version)"
+        )
+        var details = LicenseText.t(
+            "当前版本 \(getCurrentVersion()) → 新版本 \(release.version)",
+            "Current \(getCurrentVersion()) → new \(release.version)"
+        )
+        let notes = release.notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !notes.isEmpty {
+            details += "\n\n\(notes)"
+        }
+        details += "\n\n" + localized(.updaterConfirmMessage)
+        alert.informativeText = details
         alert.alertStyle = .informational
         alert.addButton(withTitle: localized(.downloadUpdate))
         alert.addButton(withTitle: localized(.cancel))

@@ -609,7 +609,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 20261110;
+				CURRENT_PROJECT_VERSION = 20261111;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = D4KD8XCCL6;
 				ENABLE_APP_SANDBOX = NO;
@@ -621,7 +621,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 2.5.3;
+				MARKETING_VERSION = 2.5.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.roversx.launch;
 				PRODUCT_MODULE_NAME = LaunchApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -648,7 +648,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 20261110;
+				CURRENT_PROJECT_VERSION = 20261111;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = D4KD8XCCL6;
 				ENABLE_APP_SANDBOX = NO;
@@ -660,7 +660,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 2.5.3;
+				MARKETING_VERSION = 2.5.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.roversx.launch;
 				PRODUCT_MODULE_NAME = LaunchApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
