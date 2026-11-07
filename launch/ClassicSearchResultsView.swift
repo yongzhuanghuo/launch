@@ -61,7 +61,7 @@ struct ClassicSearchResultsView: View {
 
     @ViewBuilder
     private func itemButton(_ item: LaunchpadItem, index: Int) -> some View {
-        LaunchpadItemButton(
+        let button = LaunchpadItemButton(
             item: item,
             iconSize: iconSize,
             labelWidth: iconSize * 1.5,
@@ -91,6 +91,14 @@ struct ClassicSearchResultsView: View {
                     )
                     .padding(-6)
             }
+        }
+
+        if case .app(let app) = item {
+            button.launchNextHideAppContextMenu(app: app, appStore: appStore)
+        } else if case .folder(let folder) = item {
+            button.launchNextHideAppContextMenu(app: nil, folder: folder, appStore: appStore)
+        } else {
+            button
         }
     }
 

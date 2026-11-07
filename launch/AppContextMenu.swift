@@ -18,6 +18,8 @@ extension AppContextMenuTitleKey {
             return .contextMenuRemoveQuarantineInTerminal
         case .hideApp:
             return .hiddenAppsAddButton
+        case .uninstallApp:
+            return .contextMenuUninstallApp
         case .uninstallWithConfiguredTool:
             return .contextMenuUninstallWithConfiguredTool
         case .batchSelectApps:
@@ -121,6 +123,10 @@ private final class launchContextMenuRouteHandler: AppContextMenuRouteHandling {
 
     func hideApp(_ app: AppInfo) {
         _ = appStore.hideApp(app)
+    }
+
+    func uninstallApp(_ app: AppInfo) {
+        AppUninstallerWindowController.shared.show(app: app, appStore: appStore)
     }
 
     func uninstallWithConfiguredTool(_ app: AppInfo) {

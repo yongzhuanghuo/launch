@@ -23,6 +23,8 @@ final class AppContextMenuTests: XCTestCase {
                 .separator,
                 .action(.hideApp),
                 .separator,
+                .action(.uninstallApp),
+                .separator,
                 .action(.uninstallWithConfiguredTool)
             ]
         )
@@ -35,7 +37,9 @@ final class AppContextMenuTests: XCTestCase {
                 .action(.showInFinder),
                 .action(.copyPath),
                 .separator,
-                .action(.hideApp)
+                .action(.hideApp),
+                .separator,
+                .action(.uninstallApp)
             ]
         )
     }
@@ -53,6 +57,8 @@ final class AppContextMenuTests: XCTestCase {
                 .action(.copyPath),
                 .separator,
                 .action(.hideApp),
+                .separator,
+                .action(.uninstallApp),
                 .separator,
                 .action(.startBatchSelection),
                 .separator,
@@ -80,6 +86,8 @@ final class AppContextMenuTests: XCTestCase {
                 .action(.copyPath),
                 .separator,
                 .action(.hideApp),
+                .separator,
+                .action(.uninstallApp),
                 .separator,
                 .action(.uninstallWithConfiguredTool)
             ]
@@ -120,6 +128,8 @@ final class AppContextMenuTests: XCTestCase {
                 .action(.pinToFolderQuickLaunchTop),
                 .separator,
                 .action(.hideApp),
+                .separator,
+                .action(.uninstallApp),
                 .separator,
                 .action(.uninstallWithConfiguredTool)
             ]
@@ -213,6 +223,7 @@ final class AppContextMenuTests: XCTestCase {
             .copyPath: (.localized(.copyAppPath), "doc.on.doc", .normal),
             .removeQuarantine: (.localized(.removeQuarantineInTerminal), "terminal", .normal),
             .hideApp: (.localized(.hideApp), "eye.slash", .normal),
+            .uninstallApp: (.localized(.uninstallApp), "trash", .destructive),
             .uninstallWithConfiguredTool: (.localized(.uninstallWithConfiguredTool), "trash", .destructive),
             .startBatchSelection: (.localized(.batchSelectApps), "checklist", .normal),
             .pinToFolderQuickLaunchTop: (.localized(.pinToFolderQuickLaunchTop), "pin", .normal),
@@ -328,12 +339,14 @@ final class AppContextMenuTests: XCTestCase {
     }
 
     private func tokens(for entries: [AppContextMenuEntry]) -> [Token] {
-        entries.map { entry in
+        entries.compactMap { entry -> Token? in
             switch entry {
             case .separator:
                 return .separator
             case .action(let item), .quickLaunch(let item):
                 return .action(item.action)
+            case .submenu:
+                return nil
             }
         }
     }
@@ -368,6 +381,10 @@ final class AppContextMenuTests: XCTestCase {
             routes.append(.hideApp(app))
         }
 
+        func uninstallApp(_ app: String) {
+            routes.append(.uninstallApp(app))
+        }
+
         func uninstallWithConfiguredTool(_ app: String) {
             routes.append(.uninstallWithConfiguredTool(app))
         }
@@ -390,6 +407,10 @@ final class AppContextMenuTests: XCTestCase {
 
         func launchFolderApp(path: String, folder: String) {
             routes.append(.launchFolderApp(path: path, folder: folder))
+        }
+
+        func moveToGroup(_ app: String, folderID: String) {
+            routes.append(.moveToGroup(app, folderID: folderID))
         }
 
         func renameFolder(_ folder: String) {

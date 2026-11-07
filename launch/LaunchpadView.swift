@@ -2695,17 +2695,20 @@ extension LaunchpadView {
             }
         }
 
-        // Buho's default page shortcuts: Command + Left/Right.
-        if event.modifierFlags.contains(.command), !isSearchFieldFocused {
-            switch code {
-            case 123:
+        // 可配置的上一页/下一页快捷键，默认 Command + Left/Right。
+        if !isSearchFieldFocused {
+            let flags = event.modifierFlags.normalizedShortcutFlags
+            if let shortcut = appStore.pageUpShortcut,
+               code == shortcut.keyCode,
+               flags == shortcut.modifierFlags {
                 navigateToPreviousPage()
                 return nil
-            case 124:
+            }
+            if let shortcut = appStore.pageDownShortcut,
+               code == shortcut.keyCode,
+               flags == shortcut.modifierFlags {
                 navigateToNextPage()
                 return nil
-            default:
-                break
             }
         }
 

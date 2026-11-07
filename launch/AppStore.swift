@@ -426,6 +426,8 @@ final class AppStore: ObservableObject {
     static let rememberPageKey = "rememberLastPage"
     static let rememberedPageIndexKey = "rememberedPageIndex"
     static let globalHotKeyKey = "globalHotKeyConfiguration"
+    static let pageUpShortcutKey = "pageUpShortcutConfiguration"
+    static let pageDownShortcutKey = "pageDownShortcutConfiguration"
     static let hoverMagnificationKey = "enableHoverMagnification"
     static let hoverMagnificationScaleKey = "hoverMagnificationScale"
     static let activePressEffectKey = "enableActivePressEffect"
@@ -2357,6 +2359,20 @@ final class AppStore: ObservableObject {
         }
     }
 
+    @Published var pageUpShortcut: HotKeyConfiguration? = AppStore.loadPageShortcut(
+        key: AppStore.pageUpShortcutKey,
+        defaultKeyCode: 123
+    ) {
+        didSet { persistPageShortcut(pageUpShortcut, key: AppStore.pageUpShortcutKey) }
+    }
+
+    @Published var pageDownShortcut: HotKeyConfiguration? = AppStore.loadPageShortcut(
+        key: AppStore.pageDownShortcutKey,
+        defaultKeyCode: 124
+    ) {
+        didSet { persistPageShortcut(pageDownShortcut, key: AppStore.pageDownShortcutKey) }
+    }
+
     @Published var dockDragEnabled: Bool = {
         let defaults = UserDefaults.standard
         if let stored = defaults.object(forKey: AppStore.dockDragEnabledKey) as? Bool {
@@ -3634,6 +3650,23 @@ final class AppStore: ObservableObject {
     private static func loadHotKeyConfiguration() -> HotKeyConfiguration? {
         guard let dict = UserDefaults.standard.dictionary(forKey: globalHotKeyKey) else { return nil }
         return HotKeyConfiguration(dictionary: dict)
+    }
+
+    private static func loadPageShortcut(key: String, defaultKeyCode: UInt16) -> HotKeyConfiguration? {
+        guard let dict = UserDefaults.standard.dictionary(forKey: key) else {
+            return HotKeyConfiguration(keyCode: defaultKeyCode, modifierFlags: .command)
+        }
+        if dict["disabled"] as? Bool == true { return nil }
+        return HotKeyConfiguration(dictionary: dict)
+    }
+
+    private func persistPageShortcut(_ config: HotKeyConfiguration?, key: String) {
+        let defaults = UserDefaults.standard
+        if let config {
+            defaults.set(config.dictionaryRepresentation, forKey: key)
+        } else {
+            defaults.set(["disabled": true], forKey: key)
+        }
     }
 
     // private static func loadAIOverlayHotKeyConfiguration() -> HotKeyConfiguration? {
@@ -6452,11 +6485,15 @@ final class AppStore: ObservableObject {
     }
 
     func duplicateActiveClassicScene() {
-        guard let id = activeClassicSceneID,
-              let source = classicScenes.first(where: { $0.id == id }) else {
+        guard let id = activeClassicSceneID else {
             createClassicScene(named: "场景 \(classicScenes.count + 1)")
             return
         }
+        duplicateClassicScene(id: id)
+    }
+
+    func duplicateClassicScene(id: UUID) {
+        guard let source = classicScenes.first(where: { $0.id == id }) else { return }
         let copy = ClassicScene(id: UUID(),
                                 name: "\(source.name) 副本",
                                 items: source.items,
@@ -6467,6 +6504,13 @@ final class AppStore: ObservableObject {
                                 freeLayout: source.freeLayout)
         classicScenes.append(copy)
         activeClassicSceneID = copy.id
+    }
+
+    func renameClassicScene(id: UUID, name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let index = classicScenes.firstIndex(where: { $0.id == id }) else { return }
+        classicScenes[index].name = trimmed
     }
 
     func applyClassicScene(id: UUID) {

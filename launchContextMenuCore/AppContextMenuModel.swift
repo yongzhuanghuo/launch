@@ -20,6 +20,7 @@ public enum AppContextMenuAction: Hashable {
     case copyPath
     case removeQuarantine
     case hideApp
+    case uninstallApp
     case uninstallWithConfiguredTool
     case startBatchSelection
     case finishBatchSelection
@@ -37,6 +38,7 @@ public enum AppContextMenuTitleKey: Equatable {
     case copyAppPath
     case removeQuarantineInTerminal
     case hideApp
+    case uninstallApp
     case uninstallWithConfiguredTool
     case batchSelectApps
     case finishBatchSelection
@@ -190,6 +192,15 @@ public enum AppContextMenuBuilder {
                 }
                 entries.append(.submenu(title: .verbatim(capabilities.moveToGroupTitle), items: items))
             }
+            entries.append(.separator)
+            entries.append(
+                item(.uninstallApp, .uninstallApp, symbol: "trash", role: .destructive)
+            )
+            if capabilities.canUseConfiguredUninstallTool {
+                entries.append(
+                    item(.uninstallWithConfiguredTool, .uninstallWithConfiguredTool, symbol: "trash", role: .destructive)
+                )
+            }
             return normalized(entries)
         }
 
@@ -219,6 +230,8 @@ public enum AppContextMenuBuilder {
 
         entries.append(.separator)
         entries.append(item(.hideApp, .hideApp, symbol: "eye.slash"))
+        entries.append(.separator)
+        entries.append(item(.uninstallApp, .uninstallApp, symbol: "trash", role: .destructive))
 
         if surface == .coreAnimationMainGrid, capabilities.allowsBatchSelection {
             entries.append(.separator)
@@ -330,6 +343,7 @@ public enum AppContextMenuRoute<App, Folder> {
     case copyPath(App)
     case removeQuarantine(App)
     case hideApp(App)
+    case uninstallApp(App)
     case uninstallWithConfiguredTool(App)
     case startBatchSelection
     case finishBatchSelection
@@ -353,6 +367,7 @@ public protocol AppContextMenuRouteHandling: AnyObject {
     func copyPath(_ app: App)
     func removeQuarantine(_ app: App)
     func hideApp(_ app: App)
+    func uninstallApp(_ app: App)
     func uninstallWithConfiguredTool(_ app: App)
     func startBatchSelection()
     func finishBatchSelection()
@@ -380,6 +395,8 @@ public enum AppContextMenuRouter {
             return .removeQuarantine(app)
         case (.hideApp, .app(let app, _)):
             return .hideApp(app)
+        case (.uninstallApp, .app(let app, _)):
+            return .uninstallApp(app)
         case (.uninstallWithConfiguredTool, .app(let app, _)):
             return .uninstallWithConfiguredTool(app)
         case (.startBatchSelection, .app):
@@ -433,6 +450,8 @@ public enum AppContextMenuRouter {
             handler.removeQuarantine(app)
         case .hideApp(let app):
             handler.hideApp(app)
+        case .uninstallApp(let app):
+            handler.uninstallApp(app)
         case .uninstallWithConfiguredTool(let app):
             handler.uninstallWithConfiguredTool(app)
         case .startBatchSelection:

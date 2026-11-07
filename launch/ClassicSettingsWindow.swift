@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import ApplicationServices
 import UniformTypeIdentifiers
 
 // MARK: - Window
@@ -142,6 +143,11 @@ private enum BackgroundChoice: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
+private enum ClassicSettingsConfirmation: Equatable {
+    case resetLayout
+    case deleteScene(AppStore.ClassicScene)
+}
+
 struct ClassicSettingsView: View {
     @ObservedObject var appStore: AppStore
     let onClose: () -> Void
@@ -149,7 +155,9 @@ struct ClassicSettingsView: View {
 
     @State private var selected: ClassicSettingsSection = .general
     @State private var alertMessage: String?
-    @State private var showResetConfirm = false
+    @State private var pendingConfirmation: ClassicSettingsConfirmation?
+    @State private var editingSceneID: UUID?
+    @State private var editingSceneName = ""
 
     var body: some View {
         HStack(spacing: 0) {
@@ -174,11 +182,47 @@ struct ClassicSettingsView: View {
         } message: {
             Text(alertMessage ?? "")
         }
-        .confirmationDialog("重置布局？", isPresented: $showResetConfirm, titleVisibility: .visible) {
-            Button("重置布局", role: .destructive) { appStore.resetLayout() }
-            Button("取消", role: .cancel) {}
+        .confirmationDialog(
+            confirmationTitle,
+            isPresented: Binding(
+                get: { pendingConfirmation != nil },
+                set: { if !$0 { pendingConfirmation = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let action = pendingConfirmation {
+                switch action {
+                case .resetLayout:
+                    Button("重置布局", role: .destructive) {
+                        appStore.resetLayout()
+                        pendingConfirmation = nil
+                    }
+                case .deleteScene(let scene):
+                    Button("删除场景", role: .destructive) {
+                        appStore.deleteClassicScene(id: scene.id)
+                        pendingConfirmation = nil
+                    }
+                }
+            }
+            Button("取消", role: .cancel) { pendingConfirmation = nil }
         } message: {
-            Text("将应用顺序和分组恢复默认。")
+            Text(confirmationMessage)
+        }
+    }
+
+    private var confirmationTitle: String {
+        switch pendingConfirmation {
+        case .resetLayout: return "重置布局？"
+        case .deleteScene: return "删除场景？"
+        case nil: return ""
+        }
+    }
+
+    private var confirmationMessage: String {
+        switch pendingConfirmation {
+        case .resetLayout: return "将应用顺序和分组恢复默认。"
+        case .deleteScene: return "此操作无法撤销。"
+        case nil: return ""
         }
     }
 
@@ -298,10 +342,10 @@ struct ClassicSettingsView: View {
             }
             sectionHeader("快捷键")
             settingsRow("前一页") {
-                shortcutField("⌘←")
+                PageShortcutRecorder(configuration: $appStore.pageUpShortcut)
             }
             settingsRow("后一页") {
-                shortcutField("⌘→")
+                PageShortcutRecorder(configuration: $appStore.pageDownShortcut)
             }
             settingsRow("使用 Option 键轻松分组 App", subtitle: "按住 Option 键拖动 App 进行分组，避免自动排列干扰操作。") {
                 Toggle("", isOn: $appStore.optionGroupingEnabled).labelsHidden().toggleStyle(.switch)
@@ -336,6 +380,21 @@ struct ClassicSettingsView: View {
                         appStore.gestureFingerCount = .five
                     }
                 }
+            }
+            settingsRow("手势权限", subtitle: "使用四/五指捏合手势需要开启“辅助功能”权限。") {
+                HStack(spacing: 8) {
+                    Text(AXIsProcessTrusted() ? "已授权" : "需要授权")
+                        .font(.system(size: 11))
+                        .foregroundStyle(AXIsProcessTrusted() ? Color.green : Color.orange)
+                    Button("打开辅助功能设置") {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                }
+            }
+            settingsRow("手势说明", subtitle: "启动台使用内置手势识别；如果 Mac 唤醒后手势失效，会自动重建监听，也可以重新打开启动台或重启应用。") {
+                EmptyView()
             }
             sectionHeader("语言")
             settingsRow("语言") {
@@ -465,46 +524,7 @@ struct ClassicSettingsView: View {
 
     private var layoutSection: some View {
         VStack(spacing: 0) {
-            Text("场景用于管理不同的布局方案。你可以创建多个场景，并通过右键菜单快速切换。")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
-            if appStore.classicScenes.isEmpty {
-                settingsRow("当前布局") {
-                    HStack(spacing: 8) {
-                        Button("创建默认布局") {
-                            appStore.resetLayout()
-                            appStore.createClassicScene(named: "默认")
-                        }
-                        Button("保存为场景") {
-                            appStore.createClassicScene(named: "场景 1")
-                        }
-                    }
-                }
-            } else {
-                ForEach(appStore.classicScenes) { scene in
-                    settingsRow(scene.name) {
-                        HStack(spacing: 8) {
-                            Button(appStore.activeClassicSceneID == scene.id ? "当前" : "切换") {
-                                appStore.applyClassicScene(id: scene.id)
-                            }
-                            .disabled(appStore.activeClassicSceneID == scene.id)
-                            Button("删除", role: .destructive) {
-                                appStore.deleteClassicScene(id: scene.id)
-                            }
-                        }
-                    }
-                }
-                settingsRow("场景") {
-                    HStack(spacing: 8) {
-                        Button("新建场景") {
-                            appStore.createClassicScene(named: "场景 \(appStore.classicScenes.count + 1)")
-                        }
-                        Button("复制当前布局") { appStore.duplicateActiveClassicScene() }
-                    }
-                }
-            }
+            sceneManager
             settingsRow("行数") {
                 sliderInt(value: $appStore.gridRowsPerPage, range: 3...8)
             }
@@ -528,7 +548,7 @@ struct ClassicSettingsView: View {
                 }
             }
             settingsRow("重置布局", subtitle: "将应用顺序和分组恢复默认") {
-                Button("重置…") { showResetConfirm = true }
+                Button("重置…") { pendingConfirmation = .resetLayout }
             }
             settingsRow("备份布局", subtitle: "将当前布局保存到文件") {
                 Button("备份…") { backupLayout() }
@@ -550,6 +570,135 @@ struct ClassicSettingsView: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
         )
+    }
+
+
+    private var sceneManager: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("场景")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("场景用于管理不同的布局方案。你可以创建多个场景，并通过右键菜单快速切换。")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("新建场景") {
+                    appStore.createClassicScene(named: "场景 \(appStore.classicScenes.count + 1)")
+                }
+                Button("保存当前布局") {
+                    appStore.createClassicScene(named: appStore.classicScenes.isEmpty ? "默认" : "场景 \(appStore.classicScenes.count + 1)")
+                }
+            }
+            if appStore.classicScenes.isEmpty {
+                HStack(spacing: 10) {
+                    Image(systemName: "square.grid.2x2")
+                        .foregroundStyle(.secondary)
+                    Text("还没有场景。点击“保存当前布局”创建第一个场景。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 138, maximum: 160), spacing: 10)], spacing: 10) {
+                    ForEach(appStore.classicScenes) { scene in
+                        sceneCard(scene)
+                    }
+                    Button {
+                        appStore.createClassicScene(named: "场景 \(appStore.classicScenes.count + 1)")
+                    } label: {
+                        VStack(spacing: 6) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 20, weight: .medium))
+                            Text("新建场景")
+                                .font(.system(size: 11))
+                        }
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 112)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color.primary.opacity(0.04))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [4]))
+                                .foregroundStyle(Color.primary.opacity(0.15))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(12)
+    }
+
+    private func sceneCard(_ scene: AppStore.ClassicScene) -> some View {
+        let isActive = appStore.activeClassicSceneID == scene.id
+        return Button {
+            if !isActive { appStore.applyClassicScene(id: scene.id) }
+        } label: {
+            VStack(spacing: 7) {
+                ClassicScenePreview(scene: scene, appStore: appStore)
+                    .frame(height: 72)
+                    .padding(6)
+                    .background(Color.black.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                HStack(spacing: 4) {
+                    if editingSceneID == scene.id {
+                        TextField("", text: $editingSceneName)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 11))
+                            .onSubmit { commitSceneRename(scene.id) }
+                    } else {
+                        Text(scene.name)
+                            .font(.system(size: 11, weight: isActive ? .semibold : .regular))
+                            .lineLimit(1)
+                            .onTapGesture(count: 2) { startSceneRename(scene) }
+                        if isActive {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                }
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.primary.opacity(isActive ? 0.10 : 0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(isActive ? Color.accentColor.opacity(0.8) : Color.clear, lineWidth: 1.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button("切换到此场景") { appStore.applyClassicScene(id: scene.id) }
+                .disabled(isActive)
+            Button("重命名…") { startSceneRename(scene) }
+            Button("复制场景") { appStore.duplicateClassicScene(id: scene.id) }
+            Divider()
+            Button("删除场景", role: .destructive) {
+                pendingConfirmation = .deleteScene(scene)
+            }
+        }
+    }
+
+    private func startSceneRename(_ scene: AppStore.ClassicScene) {
+        editingSceneID = scene.id
+        editingSceneName = scene.name
+    }
+
+    private func commitSceneRename(_ id: UUID) {
+        appStore.renameClassicScene(id: id, name: editingSceneName)
+        editingSceneID = nil
+        editingSceneName = ""
     }
 
     private func backupLayout() {
@@ -823,5 +972,141 @@ struct ClassicSettingsView: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
         )
+    }
+}
+
+private struct ClassicScenePreview: View {
+    let scene: AppStore.ClassicScene
+    let appStore: AppStore
+
+    var body: some View {
+        let columns = min(max(scene.columns ?? appStore.gridColumnsPerPage, 4), 7)
+        let rows = min(max(scene.rows ?? appStore.gridRowsPerPage, 3), 4)
+        GeometryReader { proxy in
+            let gap: CGFloat = 2
+            let cell = max(
+                4,
+                min(
+                    (proxy.size.width - gap * CGFloat(columns - 1)) / CGFloat(columns),
+                    (proxy.size.height - gap * CGFloat(rows - 1)) / CGFloat(rows)
+                )
+            )
+            VStack(spacing: gap) {
+                ForEach(0..<rows, id: \.self) { row in
+                    HStack(spacing: gap) {
+                        ForEach(0..<columns, id: \.self) { column in
+                            previewItem(index: row * columns + column, cell: cell)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        }
+    }
+
+    @ViewBuilder
+    private func previewItem(index: Int, cell: CGFloat) -> some View {
+        if scene.items.indices.contains(index) {
+            let item = scene.items[index]
+            switch item.kind {
+            case .app:
+                if let path = item.appPath {
+                    Image(nsImage: NSWorkspace.shared.icon(forFile: path))
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: cell, height: cell)
+                } else {
+                    placeholder(cell: cell)
+                }
+            case .folder:
+                Image(systemName: "folder.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(.secondary)
+                    .padding(cell * 0.12)
+                    .frame(width: cell, height: cell)
+            case .empty:
+                Color.clear.frame(width: cell, height: cell)
+            }
+        } else {
+            Color.clear.frame(width: cell, height: cell)
+        }
+    }
+
+    private func placeholder(cell: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: max(2, cell * 0.18), style: .continuous)
+            .fill(Color.primary.opacity(0.10))
+            .frame(width: cell, height: cell)
+    }
+}
+
+private struct PageShortcutRecorder: View {
+    @Binding var configuration: AppStore.HotKeyConfiguration?
+    @State private var isRecording = false
+    @State private var monitor: Any?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button {
+                isRecording ? stopRecording() : startRecording()
+            } label: {
+                Text(isRecording
+                     ? "请按新的快捷键…"
+                     : (configuration?.displayString ?? "未设置"))
+                    .font(.system(size: 11, design: .monospaced))
+                    .frame(minWidth: 72)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(isRecording ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.06))
+                    )
+            }
+            .buttonStyle(.plain)
+
+            if configuration != nil {
+                Button {
+                    configuration = nil
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("清除快捷键")
+            }
+        }
+        .onDisappear { stopRecording() }
+    }
+
+    private func startRecording() {
+        guard !isRecording else { return }
+        isRecording = true
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == 53 {
+                stopRecording()
+                return nil
+            }
+            let flags = event.modifierFlags.normalizedShortcutFlags
+            let hasModifier = !flags.intersection([.command, .option, .control, .shift]).isEmpty
+            let isFunctionKey = (122...135).contains(event.keyCode)
+            guard hasModifier || isFunctionKey else {
+                NSSound.beep()
+                return nil
+            }
+            configuration = AppStore.HotKeyConfiguration(
+                keyCode: event.keyCode,
+                modifierFlags: event.modifierFlags
+            )
+            stopRecording()
+            return nil
+        }
+    }
+
+    private func stopRecording() {
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        monitor = nil
+        isRecording = false
     }
 }
